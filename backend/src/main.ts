@@ -23,10 +23,13 @@ async function bootstrap() {
   );
 
   app.enableCors({
-    origin: config.get<string>('FRONTEND_ORIGIN') ?? 'http://localhost:5173',
+    // getOrThrow, not get: Joi guarantees both vars are set (with
+    // defaults), so ConfigService's own "might be undefined" return type
+    // would otherwise be a lie here.
+    origin: config.getOrThrow<string>('FRONTEND_ORIGIN'),
     credentials: true, // needed later for cookies / the Authorization header
   });
 
-  await app.listen(config.get<number>('PORT') ?? 3000);
+  await app.listen(config.getOrThrow<number>('PORT'));
 }
 void bootstrap();

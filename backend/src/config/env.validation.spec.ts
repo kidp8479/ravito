@@ -12,6 +12,7 @@ describe('envValidationSchema', () => {
     expect(result.value as Record<string, unknown>).toMatchObject({
       NODE_ENV: 'development',
       PORT: 3000,
+      FRONTEND_ORIGIN: 'http://localhost:5173',
       LOG_LEVEL: 'info',
     });
   });

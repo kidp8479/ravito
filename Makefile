@@ -32,8 +32,10 @@ help:
 	@echo "  install         - install dependencies, set up git hooks"
 	@echo ""
 	@echo "Local dev (no containers)"
-	@echo "  dev-backend     - backend in watch mode, NO DATABASE (db isn't exposed to"
-	@echo "                    the host - use 'make up' for anything touching Postgres)"
+	@echo "  dev-backend     - backend in watch mode; needs a reachable DATABASE_URL"
+	@echo "                    (PrismaService connects eagerly at boot, and the db"
+	@echo "                    isn't exposed to the host) - use 'make up' instead"
+	@echo "                    unless you have your own local Postgres"
 	@echo "  dev-frontend    - frontend dev server (TODO: wire to real script)"
 	@echo ""
 	@echo "Container stack"
@@ -70,6 +72,13 @@ install: install-backend hooks-install
 
 install-backend:
 	cd backend && npm install
+	# npm's install-scripts allowlist blocks @prisma/client's postinstall
+	# (see docs/lessons.md) - generate explicitly or the client stays
+	# untyped until something else happens to run this. `generate` never
+	# connects to the database, but prisma.config.ts still requires
+	# DATABASE_URL to be set to *something* - this runs before `.env`
+	# necessarily exists yet (see CONTRIBUTING.md's fresh-clone order).
+	cd backend && DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" npx prisma generate
 
 hooks-install:
 	git config core.hooksPath .githooks

@@ -8,8 +8,8 @@ import tseslint from 'typescript-eslint';
 // Draconian complexity / size limits: a poor fit for a human author but a good
 // automatic net against agent over-code (speculative abstractions, giant
 // functions, deep nesting, copy-paste). All `warn` + a monotone --max-warnings
-// ceiling in the lint:check script; a rule flips to `error` only once its count
-// hits 0. See docs/adr/0005-lint-complexity-budget.md.
+// ceiling in the lint:check script; a rule flips to `error` only once its
+// count hits 0. Mirrored as-is from 42_hypertube's backend config.
 const slopBudget = {
   complexity: ['warn', 10],
   'max-depth': ['warn', 4],

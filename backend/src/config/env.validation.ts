@@ -17,9 +17,8 @@ export const envValidationSchema = Joi.object({
     .uri({ scheme: ['postgresql', 'postgres'] })
     .required(),
 
-  // Optional - CORS allowed origin for the SPA. main.ts falls back to the
-  // local Vite dev server when unset.
-  FRONTEND_ORIGIN: Joi.string().uri().optional(),
+  // CORS allowed origin for the SPA, defaulting to the local Vite dev server.
+  FRONTEND_ORIGIN: Joi.string().uri().default('http://localhost:5173'),
 
   LOG_LEVEL: Joi.string()
     .valid('fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent')
