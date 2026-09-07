@@ -1,6 +1,3 @@
-# TODO (per project): this assumes a Node/npm backend+frontend split like
-# Hypertube. Adjust working-directory, node-version, and the run steps to
-# match the actual project (or delete a job if there's only one package).
 name: CI
 
 on:
@@ -34,9 +31,10 @@ jobs:
       - run: npm run lint:check
       - run: npx tsc --noEmit
       - run: npm run test
+      # No DATABASE_URL env needed here: test/setup-env.ts falls back to a
+      # placeholder when unset (see docs/lessons.md) - it's never actually
+      # connected to, since PrismaService is mocked in every e2e spec.
       - run: npm run test:e2e
-        env:
-          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
       - run: npm run build
 
   frontend:
@@ -54,4 +52,7 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint:check
+      # No separate typecheck step: build already gates on `tsc -b` before
+      # `vite build` runs, so a standalone tsc pass here would just
+      # duplicate it. `make typecheck-frontend` still exists for local use.
       - run: npm run build
