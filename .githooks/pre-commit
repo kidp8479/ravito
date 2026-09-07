@@ -1,0 +1,14 @@
+#!/bin/sh
+# Runs before every commit (enabled via `git config core.hooksPath .githooks`,
+# done automatically by `make install`). Fails the commit if code isn't
+# formatted/linted - fix with `make format` / `make lint` and re-commit.
+
+set -e
+
+echo "pre-commit: checking formatting..."
+make format-check
+
+echo "pre-commit: checking lint..."
+make lint-check
+
+echo "pre-commit: OK"
