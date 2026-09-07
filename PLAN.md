@@ -133,8 +133,8 @@ l'OCR, cache. Aucun de ces points ne demande de revenir sur le modele v1.
 
 ## Workflow d'equipe (meme en solo)
 
-Repris de `~/42/WIP/CLAUDE.md`, `~/42/WIP/veille-42-projets/TOOLCHAIN-SETUP.md`
-et du template `kidp8479/42-project-template`. Meme rituel que Hypertube.
+Conventions completes dans `CLAUDE.md` et `CONTRIBUTING.md` (self-contained,
+elles suivent le clone). Meme rituel que les projets 42 (Hypertube).
 
 ### Mise en place (Claude peut driver, c'est aussi de l'apprentissage agentique)
 

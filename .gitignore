@@ -45,6 +45,10 @@ coverage/
 .temp/
 .tmp/
 
+# Claude Code: keep shared context (CLAUDE.md, .claude/skills/), ignore local state
+.claude/settings.local.json
+.claude/*.local.json
+
 # Runtime data
 pids
 *.pid

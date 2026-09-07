@@ -25,3 +25,8 @@ make install   # install deps + git hooks
 make up         # start db + backend + frontend
 make help       # all targets
 ```
+
+Cloning on a new machine (toolchain auth, `.env`): see
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) > "Working on another machine". The
+repo is self-contained: `CLAUDE.md`, the conventions, and the
+`web-security-review` skill (`.claude/skills/`) all come with the clone.

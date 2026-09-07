@@ -108,7 +108,7 @@ merges.
   name earns nothing.
 - Public surface (exported classes/methods, HTTP routes, externally-invoked
   scripts) gets a doc comment; obvious private code does not.
-- Everything written into the repo is in English (see `~/42/WIP/CLAUDE.md`),
+- Everything written into the repo is in English (see `CLAUDE.md`),
   inline comments included - check none slipped through in another language
   before merging.
 
@@ -180,8 +180,8 @@ anyway.
 
 ### Generic web checklist
 
-Run the `web-security-review` skill (`~/.claude/skills/`) before merging
-anything touching auth or user data. The skill is the source of truth;
+Run the `web-security-review` skill (vendored at `.claude/skills/web-security-review/`) before merging
+anything touching auth or user data. The skill (`.claude/skills/web-security-review/SKILL.md`) is the source of truth;
 the list below is a summary to keep in sync with it, not a replacement:
 
 - **Passwords/tokens**: argon2id hashing; reset/verification tokens are
@@ -204,3 +204,30 @@ the list below is a summary to keep in sync with it, not a replacement:
 - **Secrets**: `.env` only (git-ignored), `.env.example` kept current,
   `gitleaks` green. A leaked secret is rotated, not just deleted. No
   detailed error/stack traces to the client in prod.
+
+## Working on another machine
+
+This repo is self-contained: the conventions above, the engineering
+standards in `CLAUDE.md`, and the `web-security-review` skill
+(`.claude/skills/`) all travel with the clone. What still needs a one-time
+setup per machine:
+
+```sh
+git clone git@github.com:kidp8479/ravito.git
+cd ravito
+make install          # dependencies + git hooks (core.hooksPath)
+cp .env.example .env   # then fill in real values
+
+# Toolchain auth (per machine, nothing syncs):
+gh auth login                                   # GitHub CLI
+# Linear: open Claude Code here, run /mcp, authenticate "linear"
+#         (server already declared in .mcp.json)
+# Slack:  /plugin install slack@claude-plugins-official, then authenticate
+#         (see the fallback in TOOLCHAIN notes if the OAuth flow fails)
+```
+
+Claude Code auto-loads `CLAUDE.md` and `.claude/skills/` from the repo
+root on clone, so an agent session started in this directory has the full
+context without any global config. The `mattpocock-skills` plugin and the
+`excalidraw-diagrams` skill are *not* vendored: install them globally if
+needed, or skip (diagrams can be drawn by hand at excalidraw.com).
