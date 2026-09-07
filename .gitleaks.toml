@@ -1,0 +1,17 @@
+title = "ravito gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known false positives, not real secrets"
+# NestJS CLI's generated README used to ship a fake CircleCI badge URL
+# (?token=abc123def456) as a placeholder, not a real credential. Already
+# removed from backend/README.md, but the allowlist also covers it in the
+# commit that first introduced it (RAV-1). Allowlisted by path rather than
+# by matching the secret text - gitleaks checks `regexes` against the
+# captured secret only ("abc123def456"), too generic a string to allowlist
+# safely on its own.
+paths = [
+  '''^backend/README\.md$''',
+]

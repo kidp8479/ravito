@@ -16,7 +16,7 @@ CONTAINER := $(if $(filter docker,$(firstword $(COMPOSE))),docker,podman)
 PROJECT := $(notdir $(CURDIR))
 
 .PHONY: help \
-        install hooks-install \
+        install install-backend hooks-install \
         dev-backend dev-frontend \
         up down ps re \
         logs logs-backend logs-frontend logs-db \
@@ -32,7 +32,10 @@ help:
 	@echo "  install         - install dependencies, set up git hooks"
 	@echo ""
 	@echo "Local dev (no containers)"
-	@echo "  dev-backend     - backend in watch mode (TODO: wire to real script)"
+	@echo "  dev-backend     - backend in watch mode; needs a reachable DATABASE_URL"
+	@echo "                    (PrismaService connects eagerly at boot, and the db"
+	@echo "                    isn't exposed to the host) - use 'make up' instead"
+	@echo "                    unless you have your own local Postgres"
 	@echo "  dev-frontend    - frontend dev server (TODO: wire to real script)"
 	@echo ""
 	@echo "Container stack"
@@ -64,10 +67,18 @@ help:
 # Setup                                                                        #
 # ---------------------------------------------------------------------------- #
 
-install: hooks-install
-	# TODO: install project dependencies, e.g.:
-	# cd backend && npm install
-	# cd frontend && npm install
+install: install-backend hooks-install
+	# TODO (next branch): install-frontend, once frontend/ exists.
+
+install-backend:
+	cd backend && npm install
+	# npm's install-scripts allowlist blocks @prisma/client's postinstall
+	# (see docs/lessons.md) - generate explicitly or the client stays
+	# untyped until something else happens to run this. `generate` never
+	# connects to the database, but prisma.config.ts still requires
+	# DATABASE_URL to be set to *something* - this runs before `.env`
+	# necessarily exists yet (see CONTRIBUTING.md's fresh-clone order).
+	cd backend && DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" npx prisma generate
 
 hooks-install:
 	git config core.hooksPath .githooks
@@ -77,7 +88,7 @@ hooks-install:
 # ---------------------------------------------------------------------------- #
 
 dev-backend:
-	# TODO: e.g. cd backend && npm run start:dev
+	cd backend && npm run start:dev
 
 dev-frontend:
 	# TODO: e.g. cd frontend && npm run dev
@@ -168,26 +179,30 @@ wipe-db:
 # Code quality - run on the host (fast; matches what the pre-commit hook uses) #
 # ---------------------------------------------------------------------------- #
 
+# TODO (next branch): extend each target below to also run in frontend/,
+# once it exists (see 42_hypertube's Makefile for the -backend/-frontend
+# split to mirror).
+
 format:
-	# TODO: e.g. cd backend && npm run format
+	cd backend && npm run format
 
 format-check:
-	# TODO: e.g. cd backend && npm run format:check
+	cd backend && npm run format:check
 
 lint:
-	# TODO: e.g. cd backend && npm run lint
+	cd backend && npm run lint
 
 lint-check:
-	# TODO: e.g. cd backend && npm run lint:check
+	cd backend && npm run lint:check
 
 typecheck:
-	# TODO: e.g. cd backend && npm run typecheck (tsc --noEmit)
+	cd backend && npm run typecheck
 
 test:
-	# TODO: e.g. cd backend && npm run test
+	cd backend && npm run test
 
 build:
-	# TODO: e.g. cd backend && npm run build
+	cd backend && npm run build
 
 doc:
-	# TODO: e.g. cd backend && npm run doc (Compodoc)
+	cd backend && npm run doc

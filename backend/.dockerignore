@@ -1,0 +1,13 @@
+# Keep the host toolchain out of the build context: node_modules holds
+# native modules (argon2) built against the host libc, which would break
+# the Alpine container if copied over its own `npm ci` output.
+node_modules
+dist
+coverage
+*.tsbuildinfo
+
+.git
+.env
+*.log
+Dockerfile
+.dockerignore
