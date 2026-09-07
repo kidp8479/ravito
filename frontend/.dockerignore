@@ -1,0 +1,12 @@
+# Keep the host toolchain out of the build context: node_modules holds
+# platform-specific packages (Vite/Rollup/esbuild binaries) that would
+# make the container depend on the host OS/arch if copied in.
+node_modules
+dist
+.vite
+
+.git
+.env
+*.log
+Dockerfile
+.dockerignore
