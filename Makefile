@@ -16,30 +16,32 @@ CONTAINER := $(if $(filter docker,$(firstword $(COMPOSE))),docker,podman)
 PROJECT := $(notdir $(CURDIR))
 
 .PHONY: help \
-        install install-backend hooks-install \
+        install install-backend install-frontend hooks-install \
         dev-backend dev-frontend \
         up down ps re \
         logs logs-backend logs-frontend logs-db \
         sh-backend sh-frontend psql be fe \
         clean fclean wipe-db \
-        format format-check \
-        lint lint-check \
-        typecheck \
+        format format-backend format-frontend \
+        format-check format-check-backend format-check-frontend \
+        lint lint-backend lint-frontend \
+        lint-check lint-check-backend lint-check-frontend \
+        typecheck typecheck-backend typecheck-frontend \
         test build doc
 
 help:
 	@echo "Setup"
-	@echo "  install         - install dependencies, set up git hooks"
+	@echo "  install         - install backend + frontend dependencies, set up git hooks"
 	@echo ""
 	@echo "Local dev (no containers)"
 	@echo "  dev-backend     - backend in watch mode; needs a reachable DATABASE_URL"
 	@echo "                    (PrismaService connects eagerly at boot, and the db"
 	@echo "                    isn't exposed to the host) - use 'make up' instead"
 	@echo "                    unless you have your own local Postgres"
-	@echo "  dev-frontend    - frontend dev server (TODO: wire to real script)"
+	@echo "  dev-frontend    - frontend dev server (no DB needed)"
 	@echo ""
 	@echo "Container stack"
-	@echo "  up              - compose up -d"
+	@echo "  up              - compose up -d (db + backend + frontend)"
 	@echo "  down            - compose down"
 	@echo "  ps              - compose ps"
 	@echo "  re              - fclean then up (full reset)"
@@ -47,28 +49,27 @@ help:
 	@echo "  sh-backend      - interactive shell in the backend container"
 	@echo "  sh-frontend     - interactive shell in the frontend container"
 	@echo "  psql            - psql prompt on the dev database"
-	@echo "  be CMD=\"...\"     - run a command in the backend container"
+	@echo "  be CMD=\"...\"     - run a command in the backend container (e.g. npx tsc --noEmit)"
 	@echo "  fe CMD=\"...\"     - run a command in the frontend container"
 	@echo ""
 	@echo "Cleanup"
 	@echo "  clean           - stop and remove containers (keeps volumes + images)"
-	@echo "  fclean          - clean + remove volumes and locally-built images"
+	@echo "  fclean          - clean + remove volumes (db, node_modules) and locally-built images"
 	@echo "  wipe-db         - remove only the db container + its data volume (fast schema reset)"
 	@echo ""
 	@echo "Code quality (host-side)"
-	@echo "  format[-check]   - format, write (or check only)"
-	@echo "  lint[-check]     - lint, --fix (or check only)"
-	@echo "  typecheck        - tsc --noEmit (or equivalent)"
-	@echo "  test             - run tests"
-	@echo "  build            - production build"
-	@echo "  doc              - generate code docs"
+	@echo "  format[-check]   - Prettier, write (or check only) on backend + frontend"
+	@echo "  lint[-check]     - ESLint, --fix (or check only) on backend + frontend"
+	@echo "  typecheck        - tsc on backend + frontend"
+	@echo "  test             - backend unit + e2e tests"
+	@echo "  build            - production build, backend + frontend"
+	@echo "  doc              - generate backend code docs (Compodoc) into docs/backend"
 
 # ---------------------------------------------------------------------------- #
 # Setup                                                                        #
 # ---------------------------------------------------------------------------- #
 
-install: install-backend hooks-install
-	# TODO (next branch): install-frontend, once frontend/ exists.
+install: install-backend install-frontend hooks-install
 
 install-backend:
 	cd backend && npm install
@@ -79,6 +80,9 @@ install-backend:
 	# DATABASE_URL to be set to *something* - this runs before `.env`
 	# necessarily exists yet (see CONTRIBUTING.md's fresh-clone order).
 	cd backend && DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" npx prisma generate
+
+install-frontend:
+	cd frontend && npm install
 
 hooks-install:
 	git config core.hooksPath .githooks
@@ -91,7 +95,7 @@ dev-backend:
 	cd backend && npm run start:dev
 
 dev-frontend:
-	# TODO: e.g. cd frontend && npm run dev
+	cd frontend && npm run dev
 
 # ---------------------------------------------------------------------------- #
 # Container stack - lifecycle                                                  #
@@ -135,8 +139,6 @@ sh-frontend:
 	$(COMPOSE) exec frontend sh
 
 # psql prompt on the dev database, using the container's own credentials.
-# Assumes a `db` service with POSTGRES_USER/POSTGRES_DB env vars - adjust
-# if the project uses a different database.
 psql:
 	$(COMPOSE) exec db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
@@ -158,18 +160,18 @@ fe:
 clean:
 	$(COMPOSE) down --remove-orphans
 
-# Also drop volumes (db data, node_modules) and images built locally.
-# `--rmi local` leaves pulled base images alone so the next `up` doesn't
-# re-download them.
+# Also drop volumes (db_data + the node_modules volumes) and images built
+# locally. `--rmi local` leaves pulled images like postgres:16-alpine alone,
+# so the next `up` doesn't re-download them.
 fclean:
 	$(COMPOSE) down --volumes --remove-orphans --rmi local
 
-# Reset just the database. `down` (no --volumes) removes every container
-# but keeps all named volumes, so we then drop only the db volume by name
-# (portable: compose names volumes `<project>_<key>` on both docker and
-# podman-compose). Much faster than fclean - node_modules volumes and
-# built images stay, so the next `up` needs no rebuild or reinstall.
-# TODO: adjust `db_data` below if the db volume has a different name.
+# Reset just the database. `down` (no --volumes) removes every container but
+# keeps all named volumes, so we then drop only db_data by name (portable:
+# compose names volumes `<project>_db_data` on both docker and podman-compose).
+# Much faster than fclean: the node_modules volumes and built images stay, so
+# the next `up` needs no rebuild or npm ci - only the containers and a fresh
+# database are recreated. `-` lets it pass when the volume isn't there.
 wipe-db:
 	$(COMPOSE) down
 	-$(CONTAINER) volume rm $(PROJECT)_db_data
@@ -179,30 +181,57 @@ wipe-db:
 # Code quality - run on the host (fast; matches what the pre-commit hook uses) #
 # ---------------------------------------------------------------------------- #
 
-# TODO (next branch): extend each target below to also run in frontend/,
-# once it exists (see 42_hypertube's Makefile for the -backend/-frontend
-# split to mirror).
+format: format-backend format-frontend
 
-format:
+format-backend:
 	cd backend && npm run format
 
-format-check:
+format-frontend:
+	cd frontend && npm run format
+
+format-check: format-check-backend format-check-frontend
+
+format-check-backend:
 	cd backend && npm run format:check
 
-lint:
+format-check-frontend:
+	cd frontend && npm run format:check
+
+lint: lint-backend lint-frontend
+
+lint-backend:
 	cd backend && npm run lint
 
-lint-check:
+lint-frontend:
+	cd frontend && npm run lint
+
+lint-check: lint-check-backend lint-check-frontend
+
+lint-check-backend:
 	cd backend && npm run lint:check
 
-typecheck:
+lint-check-frontend:
+	cd frontend && npm run lint:check
+
+typecheck: typecheck-backend typecheck-frontend
+
+typecheck-backend:
 	cd backend && npm run typecheck
+
+typecheck-frontend:
+	cd frontend && npm run typecheck
+
+# ---------------------------------------------------------------------------- #
+# Test / build / docs                                                          #
+# ---------------------------------------------------------------------------- #
 
 test:
 	cd backend && npm run test
+	cd backend && npm run test:e2e
 
 build:
 	cd backend && npm run build
+	cd frontend && npm run build
 
 doc:
 	cd backend && npm run doc
