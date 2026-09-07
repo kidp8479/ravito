@@ -1,0 +1,17 @@
+// Prisma schema: models arrive in RAV-4 (Lot 1). This file only wires the
+// datasource + client generator so `prisma generate` / `prisma migrate`
+// work from the first commit.
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  // Classic CJS output (node_modules/.prisma/client) rather than the newer
+  // ESM "prisma-client" generator: the latter emits import/export syntax
+  // that ts-jest can't load as CommonJS without extra ESM wiring, and this
+  // project's tsconfig/eslint are CommonJS throughout.
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
