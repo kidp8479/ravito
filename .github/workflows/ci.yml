@@ -22,6 +22,14 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      # npm's install-scripts allowlist blocks @prisma/client's postinstall
+      # (would otherwise run `prisma generate`) - same issue as the
+      # Dockerfile hit, see docs/lessons.md. Without this, the generated
+      # client's types fall back to `any`, and the lint step below fails on
+      # every call site as "unsafe any usage" instead of a real type error.
+      - run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
       - run: npm run format:check
       - run: npm run lint:check
       - run: npx tsc --noEmit

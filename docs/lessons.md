@@ -24,3 +24,27 @@ access via ownership, this is about *read* access via SELinux labels.
 ignores the flag, so this is safe across both runtimes. Apply it to every
 bind-mounted source directory (`frontend:/app:Z` too, once that service
 exists).
+
+## Modern npm blocks `@prisma/client`'s postinstall - `prisma generate` needs its own step
+
+**Symptom**: worked with plain `npm install` locally (npm 10), but both the
+Docker image build and GitHub Actions CI (`npm ci`) produced a
+`@prisma/client` with untyped, `any`-typed methods - crashing at runtime
+with `@prisma/client did not initialize yet` in the container, and failing
+`eslint`'s typed rules (`no-unsafe-call` on `this.$connect()`,
+`this.$queryRaw\`...\``) in CI.
+
+**Cause**: npm's install-scripts allowlist (a supply-chain-security
+feature, on by default in newer npm - the environments above run npm 11)
+blocks `@prisma/client`'s postinstall script, which would otherwise run
+`prisma generate` for us. Without it, `@prisma/client` ships its
+pre-generate placeholder, which is why the types come out as `any` instead
+of the real generated ones - not a normal type error, so it's easy to
+misdiagnose as an eslint config problem.
+
+**Fix**: never rely on the postinstall hook - run `npx prisma generate`
+as its own explicit step, everywhere `npm ci`/`npm install` happens for
+this package (Dockerfile, CI, and README/CONTRIBUTING setup instructions).
+It needs `DATABASE_URL` to be *set* (prisma.config.ts requires it to build
+the config) but never connects to it, so a syntactically valid placeholder
+is enough - never a value that could look like a real credential.
