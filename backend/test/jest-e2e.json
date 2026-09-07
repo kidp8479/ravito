@@ -7,5 +7,5 @@
     "^.+\\.(t|j)s$": "ts-jest"
   },
   "transformIgnorePatterns": ["node_modules/(?!(?:@nestjs/config)/)"],
-  "setupFiles": ["dotenv/config"]
+  "setupFiles": ["<rootDir>/setup-env.ts"]
 }

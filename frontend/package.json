@@ -10,8 +10,8 @@
     "typecheck": "tsc -b",
     "lint": "eslint . --fix",
     "lint:check": "eslint . --max-warnings 0",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"*.{ts,js}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"*.{ts,js}\""
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

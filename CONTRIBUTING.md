@@ -52,8 +52,12 @@ is mostly a safety net rather than a manual step.
 A git pre-commit hook (`.githooks/pre-commit`, enabled via `make install`)
 runs `make format-check` and `make lint-check` before every commit and
 blocks it if either fails - fix with `make format` / `make lint` and
-re-commit. The same checks should run in CI (`.github/workflows/ci.yml`)
-on every push and pull request, alongside a secret scan
+re-commit. These now cascade into both `backend/` and `frontend/`, so the
+hook needs both packages' dependencies installed (`make install`, or
+`make install-backend` / `make install-frontend` individually) - re-run it
+after pulling a branch that adds a package you don't have installed yet.
+The same checks should run in CI (`.github/workflows/ci.yml`) on every
+push and pull request, alongside a secret scan
 (`.github/workflows/gitleaks.yml`).
 
 ## Planning and lessons

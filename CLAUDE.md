@@ -83,9 +83,11 @@ guards: lock them before merge.
 ## Decided / not yet decided
 
 - Decided: Prisma ORM (ADR 0001), PWA (no native app in v1), household
-  access via individual accounts + invite link/code.
+  access via individual accounts + invite link/code, UI kit (Tailwind CSS
+  v4 + shadcn/ui, "new-york" style; formal rationale still owed to
+  ADR 0001 alongside the rest of the stack, RAV-3).
 - Open: auth strategy (JWT vs sessions, ADR 0002), real-time transport
-  (WebSocket vs SSE vs polling, ADR 0003), UI kit confirmation.
+  (WebSocket vs SSE vs polling, ADR 0003).
 
 ## Toolchain
 
