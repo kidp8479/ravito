@@ -25,6 +25,18 @@ import { AuthModule } from './auth/auth.module';
             config.get<string>('NODE_ENV') !== 'production'
               ? { target: 'pino-pretty', options: { singleLine: true } }
               : undefined,
+          // The access token (Bearer) and refresh token (cookie) must
+          // never land in logs, same as a password (RAV-6 security
+          // review) - pino-http's default serializers log every request
+          // and response header otherwise.
+          redact: {
+            paths: [
+              'req.headers.authorization',
+              'req.headers.cookie',
+              'res.headers["set-cookie"]',
+            ],
+            censor: '[Redacted]',
+          },
         },
       }),
     }),
