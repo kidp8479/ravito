@@ -46,8 +46,36 @@ interface FakeHouseholdInvite {
   consumedAt: Date | null;
 }
 
+interface FakeProduct {
+  id: string;
+  householdId: string;
+  name: string;
+  category: string | null;
+  defaultUnit: string | null;
+  createdAt: Date;
+}
+
+interface FakeInventoryItem {
+  id: string;
+  householdId: string;
+  productId: string;
+  quantity: number;
+  unit: string;
+  updatedAt: Date;
+}
+
 function memberKey(householdId: string, userId: string): string {
   return `${householdId}:${userId}`;
+}
+
+// Prisma's real `findUnique`/`update`/`delete` allow extra filter fields
+// alongside the unique one ("extended where on unique queries") - this
+// mirrors that: `id` must match, and every other present field on `where`
+// must also match the row.
+function matchesWhere<T extends object>(row: T, where: Partial<T>): boolean {
+  return (Object.entries(where) as [keyof T, T[keyof T]][]).every(
+    ([key, value]) => row[key] === value,
+  );
 }
 
 export function createFakePrisma() {
@@ -60,6 +88,8 @@ export function createFakePrisma() {
   const membersByKey = new Map<string, FakeHouseholdMember>();
   const invitesById = new Map<string, FakeHouseholdInvite>();
   const invitesByCode = new Map<string, FakeHouseholdInvite>();
+  const productsById = new Map<string, FakeProduct>();
+  const inventoryItemsById = new Map<string, FakeInventoryItem>();
 
   const client = {
     user: {
@@ -337,6 +367,221 @@ export function createFakePrisma() {
           }
           Object.assign(invite, data);
           return Promise.resolve({ count: 1 });
+        },
+      ),
+    },
+    product: {
+      findMany: jest.fn(
+        ({
+          where,
+          orderBy,
+          take,
+        }: {
+          where?: { householdId?: string; name?: { contains: string } };
+          orderBy?: { name?: 'asc' | 'desc' };
+          take?: number;
+        }) => {
+          let rows = [...productsById.values()].filter(
+            (product) =>
+              (where?.householdId === undefined ||
+                product.householdId === where.householdId) &&
+              (where?.name === undefined ||
+                product.name
+                  .toLowerCase()
+                  .includes(where.name.contains.toLowerCase())),
+          );
+          if (orderBy?.name) {
+            rows = rows.sort((a, b) =>
+              orderBy.name === 'desc'
+                ? b.name.localeCompare(a.name)
+                : a.name.localeCompare(b.name),
+            );
+          }
+          return Promise.resolve(take ? rows.slice(0, take) : rows);
+        },
+      ),
+      findUnique: jest.fn(
+        ({ where }: { where: { id: string; householdId?: string } }) => {
+          const product = productsById.get(where.id);
+          return Promise.resolve(
+            product && matchesWhere(product, where) ? product : null,
+          );
+        },
+      ),
+      create: jest.fn(
+        ({
+          data,
+        }: {
+          data: {
+            householdId: string;
+            name: string;
+            category?: string;
+            defaultUnit?: string;
+          };
+        }) => {
+          const duplicate = [...productsById.values()].some(
+            (product) =>
+              product.householdId === data.householdId &&
+              product.name === data.name,
+          );
+          if (duplicate) {
+            throw uniqueConstraintError();
+          }
+          const product: FakeProduct = {
+            id: `product-${nextId++}`,
+            category: null,
+            defaultUnit: null,
+            createdAt: new Date(),
+            ...data,
+          };
+          productsById.set(product.id, product);
+          return Promise.resolve(product);
+        },
+      ),
+      update: jest.fn(
+        ({
+          where,
+          data,
+        }: {
+          where: { id: string; householdId: string };
+          data: Partial<FakeProduct>;
+        }) => {
+          const product = productsById.get(where.id);
+          if (!product || !matchesWhere(product, where)) {
+            throw recordNotFoundError();
+          }
+          if (
+            data.name !== undefined &&
+            [...productsById.values()].some(
+              (other) =>
+                other.id !== product.id &&
+                other.householdId === product.householdId &&
+                other.name === data.name,
+            )
+          ) {
+            throw uniqueConstraintError();
+          }
+          Object.assign(product, data);
+          return Promise.resolve(product);
+        },
+      ),
+      delete: jest.fn(
+        ({ where }: { where: { id: string; householdId: string } }) => {
+          const product = productsById.get(where.id);
+          if (!product || !matchesWhere(product, where)) {
+            throw recordNotFoundError();
+          }
+          productsById.delete(product.id);
+          // Mirrors the schema's InventoryItem.productId onDelete: Cascade
+          // (backend/prisma/schema.prisma) - without this, a deleted
+          // product's inventory rows would linger here while real
+          // Postgres removes them, letting a test pass against this fake
+          // and fail against the real thing.
+          for (const item of inventoryItemsById.values()) {
+            if (item.productId === product.id) {
+              inventoryItemsById.delete(item.id);
+            }
+          }
+          return Promise.resolve(product);
+        },
+      ),
+    },
+    inventoryItem: {
+      findMany: jest.fn(
+        ({
+          where,
+          include,
+        }: {
+          where?: { householdId?: string };
+          include?: { product?: unknown };
+        }) => {
+          const rows = [...inventoryItemsById.values()].filter(
+            (item) =>
+              where?.householdId === undefined ||
+              item.householdId === where.householdId,
+          );
+          return Promise.resolve(
+            rows.map((item) => ({
+              ...item,
+              ...(include?.product
+                ? { product: productsById.get(item.productId) }
+                : {}),
+            })),
+          );
+        },
+      ),
+      findUnique: jest.fn(
+        ({
+          where,
+          include,
+        }: {
+          where: { id: string; householdId?: string };
+          include?: { product?: unknown };
+        }) => {
+          const item = inventoryItemsById.get(where.id);
+          if (!item || !matchesWhere(item, where)) {
+            return Promise.resolve(null);
+          }
+          return Promise.resolve({
+            ...item,
+            ...(include?.product
+              ? { product: productsById.get(item.productId) }
+              : {}),
+          });
+        },
+      ),
+      create: jest.fn(
+        ({
+          data,
+        }: {
+          data: {
+            householdId: string;
+            productId: string;
+            quantity: number;
+            unit: string;
+          };
+        }) => {
+          const duplicate = [...inventoryItemsById.values()].some(
+            (item) =>
+              item.householdId === data.householdId &&
+              item.productId === data.productId,
+          );
+          if (duplicate) {
+            throw uniqueConstraintError();
+          }
+          const item: FakeInventoryItem = {
+            id: `inventory-${nextId++}`,
+            updatedAt: new Date(),
+            ...data,
+          };
+          inventoryItemsById.set(item.id, item);
+          return Promise.resolve(item);
+        },
+      ),
+      update: jest.fn(
+        ({
+          where,
+          data,
+        }: {
+          where: { id: string; householdId: string };
+          data: Partial<FakeInventoryItem>;
+        }) => {
+          const item = inventoryItemsById.get(where.id);
+          if (!item || !matchesWhere(item, where)) {
+            throw recordNotFoundError();
+          }
+          Object.assign(item, data, { updatedAt: new Date() });
+          return Promise.resolve(item);
+        },
+      ),
+      delete: jest.fn(
+        ({ where }: { where: { id: string; householdId: string } }) => {
+          const item = inventoryItemsById.get(where.id);
+          if (!item || !matchesWhere(item, where)) {
+            throw recordNotFoundError();
+          }
+          inventoryItemsById.delete(item.id);
+          return Promise.resolve(item);
         },
       ),
     },

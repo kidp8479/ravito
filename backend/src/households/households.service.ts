@@ -5,7 +5,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { HouseholdRole, Prisma } from '@prisma/client';
+import { HouseholdRole } from '@prisma/client';
+import {
+  isRecordNotFoundError,
+  isUniqueConstraintError,
+} from '../common/prisma/errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { INVITE_TOKEN_TTL_MS } from './households.constants';
 
@@ -111,10 +115,7 @@ export class HouseholdsService {
         // Already a member (rejoining with a second invite, or a race
         // with another invite to the same household) - the invite still
         // did its job, no need to fail the request over it.
-        const alreadyMember =
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002';
-        if (!alreadyMember) {
+        if (!isUniqueConstraintError(error)) {
           throw error;
         }
       }
@@ -155,10 +156,7 @@ export class HouseholdsService {
         where: { householdId_userId: { householdId, userId: targetUserId } },
       });
     } catch (error) {
-      const notFound =
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2025';
-      if (!notFound) {
+      if (!isRecordNotFoundError(error)) {
         throw error;
       }
       throw new NotFoundException('Membership not found');

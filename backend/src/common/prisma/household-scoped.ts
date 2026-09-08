@@ -27,21 +27,26 @@ import { PrismaService } from '../../prisma/prisma.service';
 // passing `{ householdId: otherHouseholdId }` in `data` - the `where`
 // clause still finds the caller's own row, but the write itself would
 // re-point it.
+//
+// findMany is generic over its args (`T`) so a caller passing `include`
+// or `select` (e.g. inventory items joined with their product) gets that
+// shape back, not the bare model type - the cast at each return is
+// exactly what Prisma's own non-$extends wrapping examples use to recover
+// this: the merged where-scoped object can't be proven to still match `T`
+// structurally, but the value itself is, since only `where` changed.
 
 export function householdScopedProducts(
   prisma: PrismaService,
   householdId: string,
 ) {
   return {
-    findMany(
-      args: Omit<Prisma.ProductFindManyArgs, 'where'> & {
-        where?: Prisma.ProductWhereInput;
-      } = {},
-    ) {
+    findMany<T extends Omit<Prisma.ProductFindManyArgs, 'where'>>(
+      args: T & { where?: Prisma.ProductWhereInput } = {} as T,
+    ): Prisma.PrismaPromise<Prisma.ProductGetPayload<T>[]> {
       return prisma.product.findMany({
         ...args,
         where: { ...args.where, householdId },
-      });
+      }) as Prisma.PrismaPromise<Prisma.ProductGetPayload<T>[]>;
     },
     findUnique(id: string) {
       return prisma.product.findUnique({ where: { id, householdId } });
@@ -70,29 +75,36 @@ export function householdScopedInventoryItems(
   // *somewhere* - not that it belongs to this household. Without this
   // check, create() would let household A create an InventoryItem that
   // points at household B's product: an invisible cross-tenant reference
-  // this module exists specifically to prevent.
+  // this module exists specifically to prevent. Reuses
+  // householdScopedProducts' own findUnique rather than re-deriving the
+  // same scoped lookup here.
   async function assertProductInHousehold(productId: string): Promise<void> {
-    const product = await prisma.product.findUnique({
-      where: { id: productId, householdId },
-    });
+    const product = await householdScopedProducts(
+      prisma,
+      householdId,
+    ).findUnique(productId);
     if (!product) {
       throw new NotFoundException('Product not found');
     }
   }
 
   return {
-    findMany(
-      args: Omit<Prisma.InventoryItemFindManyArgs, 'where'> & {
-        where?: Prisma.InventoryItemWhereInput;
-      } = {},
-    ) {
+    findMany<T extends Omit<Prisma.InventoryItemFindManyArgs, 'where'>>(
+      args: T & { where?: Prisma.InventoryItemWhereInput } = {} as T,
+    ): Prisma.PrismaPromise<Prisma.InventoryItemGetPayload<T>[]> {
       return prisma.inventoryItem.findMany({
         ...args,
         where: { ...args.where, householdId },
-      });
+      }) as Prisma.PrismaPromise<Prisma.InventoryItemGetPayload<T>[]>;
     },
-    findUnique(id: string) {
-      return prisma.inventoryItem.findUnique({ where: { id, householdId } });
+    findUnique<T extends Omit<Prisma.InventoryItemFindUniqueArgs, 'where'>>(
+      id: string,
+      args: T = {} as T,
+    ): Prisma.PrismaPromise<Prisma.InventoryItemGetPayload<T> | null> {
+      return prisma.inventoryItem.findUnique({
+        ...args,
+        where: { id, householdId },
+      }) as Prisma.PrismaPromise<Prisma.InventoryItemGetPayload<T> | null>;
     },
     async create(
       data: Omit<Prisma.InventoryItemUncheckedCreateInput, 'householdId'>,

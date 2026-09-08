@@ -5,8 +5,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { isUniqueConstraintError } from '../common/prisma/errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL_MS } from './auth.constants';
 import { LoginDto } from './dto/login.dto';
@@ -61,10 +61,7 @@ export class AuthService {
       // concurrent registrations for the same email can both pass it before
       // either insert commits, so the DB's own unique constraint is what
       // catches that case, as a P2002 here rather than a 409.
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
+      if (isUniqueConstraintError(error)) {
         throw new ConflictException('Email already in use');
       }
       throw error;

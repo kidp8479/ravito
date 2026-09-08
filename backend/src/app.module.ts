@@ -1,5 +1,11 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_PIPE } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
@@ -10,6 +16,8 @@ import { CommonModule } from './common/common.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { HouseholdsModule } from './households/households.module';
+import { ProductsModule } from './products/products.module';
+import { InventoryModule } from './inventory/inventory.module';
 
 @Module({
   imports: [
@@ -56,6 +64,27 @@ import { HouseholdsModule } from './households/households.module';
     HealthModule,
     AuthModule,
     HouseholdsModule,
+    ProductsModule,
+    InventoryModule,
+  ],
+  providers: [
+    // A DI-registered global pipe (APP_PIPE), not `app.useGlobalPipes()`
+    // in main.ts: the latter never ran for any e2e spec (every one builds
+    // its app from this module directly, skipping main.ts's bootstrap()
+    // entirely) - the same gap that let helmet() ship untested in RAV-6's
+    // security review, until it moved here too. Every DTO's validation
+    // (@IsEnum, @Length, @Min, ...) was silently never enforced in any
+    // e2e test until this moved - discovered by RAV-11's product/
+    // inventory validation specs actually failing against a real Nest
+    // app instead of passing for the wrong reason.
+    {
+      provide: APP_PIPE,
+      useValue: new ValidationPipe({
+        whitelist: true, // strips fields not declared in the DTO
+        forbidNonWhitelisted: true, // ...and returns 400 if any are sent
+        transform: true, // turns the JSON payload into a DTO class instance
+      }),
+    },
   ],
 })
 export class AppModule implements NestModule {

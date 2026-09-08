@@ -17,3 +17,13 @@ export function recordNotFoundError(): Prisma.PrismaClientKnownRequestError {
     clientVersion: 'test',
   });
 }
+
+export function foreignKeyError(): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError(
+    'Foreign key constraint failed',
+    {
+      code: 'P2003',
+      clientVersion: 'test',
+    },
+  );
+}
