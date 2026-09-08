@@ -4,14 +4,9 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { auth, createHousehold, registerUser } from './e2e-helpers';
 import { createFakePrisma } from './fake-prisma';
 
-interface AccessTokenBody {
-  accessToken: string;
-}
-interface MeBody {
-  id: string;
-}
 interface HouseholdBody {
   id: string;
   name: string;
@@ -45,35 +40,13 @@ describe('Households (e2e)', () => {
     await app.close();
   });
 
-  async function registerUser(
-    email: string,
-  ): Promise<{ userId: string; accessToken: string }> {
-    const registerRes = await request(server)
-      .post('/auth/register')
-      .send({ email, password: 'a-strong-password', displayName: email })
-      .expect(201);
-    const { accessToken } = registerRes.body as AccessTokenBody;
-
-    const meRes = await request(server)
-      .get('/auth/me')
-      .set('Authorization', `Bearer ${accessToken}`)
-      .expect(200);
-    const { id: userId } = meRes.body as MeBody;
-
-    return { userId, accessToken };
-  }
-
-  function auth(token: string): [string, string] {
-    return ['Authorization', `Bearer ${token}`];
-  }
-
   it('rejects every household route with no access token', async () => {
     await request(server).post('/households').send({ name: 'x' }).expect(401);
     await request(server).get('/households/x/members').expect(401);
   });
 
   it('lists the households the caller belongs to, empty when none', async () => {
-    const alice = await registerUser('alice-mine@example.com');
+    const alice = await registerUser(server, 'alice-mine@example.com');
 
     const emptyRes = await request(server)
       .get('/households/mine')
@@ -81,12 +54,11 @@ describe('Households (e2e)', () => {
       .expect(200);
     expect(emptyRes.body).toEqual([]);
 
-    const createRes = await request(server)
-      .post('/households')
-      .set(...auth(alice.accessToken))
-      .send({ name: 'Casa Alice' })
-      .expect(201);
-    const household = createRes.body as HouseholdBody;
+    const household = await createHousehold(
+      server,
+      alice.accessToken,
+      'Casa Alice',
+    );
 
     const mineRes = await request(server)
       .get('/households/mine')
@@ -99,15 +71,14 @@ describe('Households (e2e)', () => {
   });
 
   it('lets a member create a household, invite, and join', async () => {
-    const alice = await registerUser('alice@example.com');
-    const bob = await registerUser('bob@example.com');
+    const alice = await registerUser(server, 'alice@example.com');
+    const bob = await registerUser(server, 'bob@example.com');
 
-    const createRes = await request(server)
-      .post('/households')
-      .set(...auth(alice.accessToken))
-      .send({ name: 'Casa Alice' })
-      .expect(201);
-    const household = createRes.body as HouseholdBody;
+    const household = await createHousehold(
+      server,
+      alice.accessToken,
+      'Casa Alice',
+    );
 
     const inviteRes = await request(server)
       .post(`/households/${household.id}/invites`)
@@ -135,8 +106,8 @@ describe('Households (e2e)', () => {
   });
 
   it('rejects an invalid or already-used invite code', async () => {
-    const alice = await registerUser('alice2@example.com');
-    const bob = await registerUser('bob2@example.com');
+    const alice = await registerUser(server, 'alice2@example.com');
+    const bob = await registerUser(server, 'bob2@example.com');
 
     await request(server)
       .post('/households/join')
@@ -144,12 +115,7 @@ describe('Households (e2e)', () => {
       .send({ code: 'not-a-real-code' })
       .expect(400);
 
-    const createRes = await request(server)
-      .post('/households')
-      .set(...auth(alice.accessToken))
-      .send({ name: 'Casa' })
-      .expect(201);
-    const household = createRes.body as HouseholdBody;
+    const household = await createHousehold(server, alice.accessToken);
     const inviteRes = await request(server)
       .post(`/households/${household.id}/invites`)
       .set(...auth(alice.accessToken))
@@ -163,7 +129,7 @@ describe('Households (e2e)', () => {
       .expect(200);
 
     // A third user trying the same, now-consumed code.
-    const carol = await registerUser('carol2@example.com');
+    const carol = await registerUser(server, 'carol2@example.com');
     await request(server)
       .post('/households/join')
       .set(...auth(carol.accessToken))
@@ -176,21 +142,15 @@ describe('Households (e2e)', () => {
     // nothing from household B's endpoints, not even a 404 that would
     // confirm the household exists.
     it('blocks a member of household B from every route scoped to household A', async () => {
-      const alice = await registerUser('alice3@example.com');
-      const bob = await registerUser('bob3@example.com');
+      const alice = await registerUser(server, 'alice3@example.com');
+      const bob = await registerUser(server, 'bob3@example.com');
 
-      const householdARes = await request(server)
-        .post('/households')
-        .set(...auth(alice.accessToken))
-        .send({ name: 'Household A' })
-        .expect(201);
-      const householdA = householdARes.body as HouseholdBody;
-
-      await request(server)
-        .post('/households')
-        .set(...auth(bob.accessToken))
-        .send({ name: 'Household B' })
-        .expect(201);
+      const householdA = await createHousehold(
+        server,
+        alice.accessToken,
+        'Household A',
+      );
+      await createHousehold(server, bob.accessToken, 'Household B');
 
       // Bob (member of B only) against every route scoped to A.
       await request(server)
@@ -210,15 +170,10 @@ describe('Households (e2e)', () => {
 
   describe('removing members', () => {
     async function setupHouseholdWithTwoMembers() {
-      const owner = await registerUser('owner4@example.com');
-      const member = await registerUser('member4@example.com');
+      const owner = await registerUser(server, 'owner4@example.com');
+      const member = await registerUser(server, 'member4@example.com');
 
-      const createRes = await request(server)
-        .post('/households')
-        .set(...auth(owner.accessToken))
-        .send({ name: 'Casa' })
-        .expect(201);
-      const household = createRes.body as HouseholdBody;
+      const household = await createHousehold(server, owner.accessToken);
 
       const inviteRes = await request(server)
         .post(`/households/${household.id}/invites`)
@@ -272,13 +227,12 @@ describe('Households (e2e)', () => {
     });
 
     it('lets a sole OWNER leave when nobody else is in the household', async () => {
-      const owner = await registerUser('sole-owner4@example.com');
-      const createRes = await request(server)
-        .post('/households')
-        .set(...auth(owner.accessToken))
-        .send({ name: 'Casa Sola' })
-        .expect(201);
-      const household = createRes.body as HouseholdBody;
+      const owner = await registerUser(server, 'sole-owner4@example.com');
+      const household = await createHousehold(
+        server,
+        owner.accessToken,
+        'Casa Sola',
+      );
 
       await request(server)
         .delete(`/households/${household.id}/members/${owner.userId}`)
