@@ -13,7 +13,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { useLogout, useMe } from '@/lib/auth';
 import { getAuthState } from '@/lib/auth-store';
-import { ApiError, ensureAuthLoaded } from '@/lib/api';
+import { ensureAuthLoaded, getErrorMessage } from '@/lib/api';
 import {
   useCreateHousehold,
   useCreateInvite,
@@ -22,6 +22,7 @@ import {
   useMyHouseholds,
   useRemoveMember,
   type HouseholdInvite,
+  type HouseholdMember,
   type HouseholdSummary,
 } from '@/lib/households';
 
@@ -83,10 +84,6 @@ function HouseholdPage() {
   );
 }
 
-function errorMessage(err: unknown): string {
-  return err instanceof ApiError ? err.message : 'Something went wrong.';
-}
-
 function CreateHouseholdCard() {
   const create = useCreateHousehold();
   const [name, setName] = useState('');
@@ -97,7 +94,7 @@ function CreateHouseholdCard() {
     setError(null);
     create.mutate(name, {
       onSuccess: () => setName(''),
-      onError: (err) => setError(errorMessage(err)),
+      onError: (err) => setError(getErrorMessage(err)),
     });
   }
 
@@ -140,7 +137,7 @@ function JoinHouseholdCard() {
     setError(null);
     join.mutate(code, {
       onSuccess: () => setCode(''),
-      onError: (err) => setError(errorMessage(err)),
+      onError: (err) => setError(getErrorMessage(err)),
     });
   }
 
@@ -179,7 +176,7 @@ function MemberRow({
   onRemove,
   removing,
 }: {
-  member: { userId: string; displayName: string; role: string };
+  member: Pick<HouseholdMember, 'userId' | 'displayName' | 'role'>;
   currentUserId: string | undefined;
   onRemove: (userId: string) => void;
   removing: boolean;
@@ -210,7 +207,15 @@ function HouseholdDetails({ household }: { household: HouseholdSummary }) {
   const createInvite = useCreateInvite(household.id);
   const removeMember = useRemoveMember(household.id);
   const [invite, setInvite] = useState<HouseholdInvite | null>(null);
+  const [memberError, setMemberError] = useState<string | null>(null);
   const currentUserId = me.data?.id;
+
+  function handleRemove(userId: string) {
+    setMemberError(null);
+    removeMember.mutate(userId, {
+      onError: (err) => setMemberError(getErrorMessage(err)),
+    });
+  }
 
   return (
     <Card>
@@ -228,7 +233,7 @@ function HouseholdDetails({ household }: { household: HouseholdSummary }) {
               key={member.userId}
               member={member}
               currentUserId={currentUserId}
-              onRemove={(userId) => removeMember.mutate(userId)}
+              onRemove={handleRemove}
               removing={removeMember.isPending}
             />
           ))}
@@ -255,12 +260,14 @@ function HouseholdDetails({ household }: { household: HouseholdSummary }) {
             </p>
           )}
         </div>
+
+        <FormError message={memberError} />
       </CardContent>
       <CardFooter>
         {currentUserId && (
           <Button
             variant="destructive"
-            onClick={() => removeMember.mutate(currentUserId)}
+            onClick={() => handleRemove(currentUserId)}
             disabled={removeMember.isPending}
           >
             Leave household

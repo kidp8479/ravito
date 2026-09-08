@@ -15,7 +15,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ApiError, ensureAuthLoaded } from '@/lib/api';
+import { ensureAuthLoaded, getErrorMessage } from '@/lib/api';
 import { useRegister } from '@/lib/auth';
 import { getAuthState } from '@/lib/auth-store';
 
@@ -44,10 +44,7 @@ function RegisterPage() {
       { email, password, displayName },
       {
         onSuccess: () => void navigate({ to: '/household' }),
-        onError: (err) =>
-          setError(
-            err instanceof ApiError ? err.message : 'Something went wrong.',
-          ),
+        onError: (err) => setError(getErrorMessage(err)),
       },
     );
   }

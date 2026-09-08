@@ -15,7 +15,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ApiError, ensureAuthLoaded } from '@/lib/api';
+import { ensureAuthLoaded, getErrorMessage } from '@/lib/api';
 import { useLogin } from '@/lib/auth';
 import { getAuthState } from '@/lib/auth-store';
 
@@ -43,10 +43,7 @@ function LoginPage() {
       { email, password },
       {
         onSuccess: () => void navigate({ to: '/household' }),
-        onError: (err) =>
-          setError(
-            err instanceof ApiError ? err.message : 'Something went wrong.',
-          ),
+        onError: (err) => setError(getErrorMessage(err)),
       },
     );
   }

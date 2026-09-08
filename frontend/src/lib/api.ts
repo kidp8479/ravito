@@ -19,6 +19,10 @@ export class ApiError extends Error {
   }
 }
 
+export function getErrorMessage(err: unknown): string {
+  return err instanceof ApiError ? err.message : 'Something went wrong.';
+}
+
 interface ApiFetchOptions {
   method?: string;
   body?: unknown;
@@ -48,10 +52,7 @@ async function rawFetch(
   });
 }
 
-// Exchanges the httpOnly refresh cookie for a fresh access token. Resolves
-// to false (never rejects) on any failure, so callers can treat "not
-// logged in" and "network hiccup" the same way: fall back to anonymous.
-export async function refreshAccessToken(): Promise<boolean> {
+async function doRefresh(): Promise<boolean> {
   try {
     const res = await rawFetch('/auth/refresh', null, {
       method: 'POST',
@@ -68,6 +69,24 @@ export async function refreshAccessToken(): Promise<boolean> {
     clearAccessToken();
     return false;
   }
+}
+
+// Exchanges the httpOnly refresh cookie for a fresh access token. Resolves
+// to false (never rejects) on any failure, so callers can treat "not
+// logged in" and "network hiccup" the same way: fall back to anonymous.
+//
+// Concurrent callers (e.g. several queries 401ing together after the
+// access token expires) share one in-flight request instead of each
+// firing their own: the backend rotates the refresh token on every use
+// and treats a second presentation of the same one as theft, revoking the
+// whole session - two parallel refresh calls would otherwise force-log-out
+// a user who did nothing wrong.
+let refreshInFlight: Promise<boolean> | null = null;
+export function refreshAccessToken(): Promise<boolean> {
+  refreshInFlight ??= doRefresh().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
 }
 
 // Runs once per page load: attempts the silent refresh above so route

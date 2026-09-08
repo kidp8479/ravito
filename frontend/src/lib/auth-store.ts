@@ -46,7 +46,11 @@ export function hasSessionHint(): boolean {
   try {
     return localStorage.getItem(SESSION_HINT_KEY) === '1';
   } catch {
-    return false;
+    // Storage unreadable (private mode, disabled): fail open toward
+    // attempting a real refresh rather than assuming anonymous - the
+    // wrong guess here silently logs out someone with a valid session,
+    // while the wrong guess the other way just costs one doomed request.
+    return true;
   }
 }
 
