@@ -1,15 +1,19 @@
 import { randomUUID } from 'crypto';
-import { PrismaClient } from '@prisma/client';
+import { PrismaService } from './../src/prisma/prisma.service';
 
 // Runs against a real Postgres (see Makefile `test-integration` / CI's
 // `postgres` service) - these constraints live in the schema, not in
 // application code, so mocking PrismaService (as every other spec does)
 // would test nothing here.
 describe('Prisma schema tenant constraints (integration)', () => {
-  const prisma = new PrismaClient();
+  const prisma = new PrismaService();
   let householdIds: string[];
   let userIds: string[];
   let auditLogIds: string[];
+
+  beforeAll(async () => {
+    await prisma.onModuleInit();
+  });
 
   beforeEach(() => {
     householdIds = [];
@@ -18,15 +22,18 @@ describe('Prisma schema tenant constraints (integration)', () => {
   });
 
   afterEach(async () => {
-    // Household deletion cascades to its members/invites, so deleting
-    // households first avoids relying on delete order for those two.
-    await prisma.household.deleteMany({ where: { id: { in: householdIds } } });
-    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
-    await prisma.auditLog.deleteMany({ where: { id: { in: auditLogIds } } });
+    // No ordering constraint between these three: Household/User both
+    // cascade-delete HouseholdMember/HouseholdInvite regardless of which
+    // side is deleted first, and AuditLog has no FK to either.
+    await Promise.all([
+      prisma.household.deleteMany({ where: { id: { in: householdIds } } }),
+      prisma.user.deleteMany({ where: { id: { in: userIds } } }),
+      prisma.auditLog.deleteMany({ where: { id: { in: auditLogIds } } }),
+    ]);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    await prisma.onModuleDestroy();
   });
 
   async function createHousehold() {
@@ -37,34 +44,18 @@ describe('Prisma schema tenant constraints (integration)', () => {
     return household;
   }
 
-  async function createUser() {
+  async function createUser(email = `${randomUUID()}@example.test`) {
     const user = await prisma.user.create({
-      data: {
-        email: `${randomUUID()}@example.test`,
-        passwordHash: 'x',
-        displayName: 'Test user',
-      },
+      data: { email, passwordHash: 'x', displayName: 'Test user' },
     });
     userIds.push(user.id);
     return user;
   }
 
   it('rejects an email that differs from an existing one only by case', async () => {
-    const email = `${randomUUID()}@example.test`;
-    const user = await prisma.user.create({
-      data: { email, passwordHash: 'x', displayName: 'Test user' },
-    });
-    userIds.push(user.id);
+    const user = await createUser();
 
-    await expect(
-      prisma.user.create({
-        data: {
-          email: email.toUpperCase(),
-          passwordHash: 'x',
-          displayName: 'Test user',
-        },
-      }),
-    ).rejects.toThrow();
+    await expect(createUser(user.email.toUpperCase())).rejects.toThrow();
   });
 
   it('rejects a duplicate (householdId, userId) membership', async () => {
