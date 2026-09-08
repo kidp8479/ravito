@@ -72,6 +72,32 @@ describe('Households (e2e)', () => {
     await request(server).get('/households/x/members').expect(401);
   });
 
+  it('lists the households the caller belongs to, empty when none', async () => {
+    const alice = await registerUser('alice-mine@example.com');
+
+    const emptyRes = await request(server)
+      .get('/households/mine')
+      .set(...auth(alice.accessToken))
+      .expect(200);
+    expect(emptyRes.body).toEqual([]);
+
+    const createRes = await request(server)
+      .post('/households')
+      .set(...auth(alice.accessToken))
+      .send({ name: 'Casa Alice' })
+      .expect(201);
+    const household = createRes.body as HouseholdBody;
+
+    const mineRes = await request(server)
+      .get('/households/mine')
+      .set(...auth(alice.accessToken))
+      .expect(200);
+    const mine = mineRes.body as (HouseholdBody & { role: string })[];
+    expect(mine).toEqual([
+      { id: household.id, name: household.name, role: 'OWNER' },
+    ]);
+  });
+
   it('lets a member create a household, invite, and join', async () => {
     const alice = await registerUser('alice@example.com');
     const bob = await registerUser('bob@example.com');

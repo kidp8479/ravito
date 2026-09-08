@@ -224,17 +224,25 @@ export function createFakePrisma() {
           );
         },
       ),
-      findMany: jest.fn(({ where }: { where: { householdId: string } }) => {
-        const rows = [...membersByKey.values()]
-          .filter((member) => member.householdId === where.householdId)
-          .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime());
-        return Promise.resolve(
-          rows.map((member) => ({
-            ...member,
-            user: usersById.get(member.userId),
-          })),
-        );
-      }),
+      findMany: jest.fn(
+        ({ where }: { where: { householdId?: string; userId?: string } }) => {
+          const rows = [...membersByKey.values()]
+            .filter(
+              (member) =>
+                (where.householdId === undefined ||
+                  member.householdId === where.householdId) &&
+                (where.userId === undefined || member.userId === where.userId),
+            )
+            .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime());
+          return Promise.resolve(
+            rows.map((member) => ({
+              ...member,
+              user: usersById.get(member.userId),
+              household: householdsById.get(member.householdId),
+            })),
+          );
+        },
+      ),
       count: jest.fn(
         ({
           where,

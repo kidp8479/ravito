@@ -70,6 +70,41 @@ describe('HouseholdsService', () => {
     service = module.get(HouseholdsService);
   });
 
+  describe('listMine', () => {
+    it("returns the caller's households with their role, oldest join first", async () => {
+      prisma.householdMember.findMany.mockResolvedValue([
+        {
+          role: 'MEMBER',
+          household: { id: 'h1', name: 'Casa' },
+        },
+        {
+          role: 'OWNER',
+          household: { id: 'h2', name: 'Chez Bob' },
+        },
+      ]);
+
+      const result = await service.listMine('user-1');
+
+      expect(prisma.householdMember.findMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+        include: { household: { select: { id: true, name: true } } },
+        orderBy: { joinedAt: 'asc' },
+      });
+      expect(result).toEqual([
+        { id: 'h1', name: 'Casa', role: 'MEMBER' },
+        { id: 'h2', name: 'Chez Bob', role: 'OWNER' },
+      ]);
+    });
+
+    it('returns an empty list for a user in no household', async () => {
+      prisma.householdMember.findMany.mockResolvedValue([]);
+
+      const result = await service.listMine('user-1');
+
+      expect(result).toEqual([]);
+    });
+  });
+
   describe('create', () => {
     it('creates the household with the caller as OWNER', async () => {
       prisma.household.create.mockResolvedValue({ id: 'h1', name: 'Casa' });

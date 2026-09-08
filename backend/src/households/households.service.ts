@@ -22,9 +22,33 @@ export interface HouseholdMemberView {
   displayName: string;
 }
 
+export interface HouseholdSummary {
+  id: string;
+  name: string;
+  role: HouseholdRole;
+}
+
 @Injectable()
 export class HouseholdsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  // Lets the frontend rediscover the caller's household(s) on a fresh
+  // session (new device, cleared storage) instead of relying on a
+  // client-stored householdId, which a create/join response alone can't
+  // survive.
+  async listMine(userId: string): Promise<HouseholdSummary[]> {
+    const memberships = await this.prisma.householdMember.findMany({
+      where: { userId },
+      include: { household: { select: { id: true, name: true } } },
+      orderBy: { joinedAt: 'asc' },
+    });
+
+    return memberships.map((membership) => ({
+      id: membership.household.id,
+      name: membership.household.name,
+      role: membership.role,
+    }));
+  }
 
   async create(
     ownerId: string,
