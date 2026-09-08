@@ -235,11 +235,21 @@ export function createFakePrisma() {
             )
             .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime());
           return Promise.resolve(
-            rows.map((member) => ({
-              ...member,
-              user: usersById.get(member.userId),
-              household: householdsById.get(member.householdId),
-            })),
+            rows.map((member) => {
+              const household = householdsById.get(member.householdId);
+              return {
+                ...member,
+                user: usersById.get(member.userId),
+                // Mirrors HouseholdsService.listMine's `select: { id, name }`
+                // - real Prisma would omit createdAt here too, and a fake
+                // that returned it regardless couldn't catch a select
+                // mismatch if the mapping code ever grew to read it.
+                household: household && {
+                  id: household.id,
+                  name: household.name,
+                },
+              };
+            }),
           );
         },
       ),
