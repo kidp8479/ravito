@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -16,10 +15,12 @@ import { JwtStrategy } from './strategies/jwt.strategy';
         secret: config.getOrThrow<string>('JWT_ACCESS_SECRET'),
       }),
     }),
-    // 10 requests / minute per IP on every auth route (RAV-6): generous
-    // enough for normal use (including a few mistyped-password retries),
-    // tight enough to blunt register/login brute-forcing.
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 10 }]),
+    // ThrottlerModule.forRoot() moved to AppModule (RAV-7): households/'s
+    // join-by-code route needs the same ThrottlerGuard, and while
+    // @nestjs/throttler's ThrottlerModule is itself @Global() (so this
+    // would still have worked registered here), an app-wide rate limiter
+    // reads clearer declared alongside Prisma/Common at the app level
+    // than nested inside the one domain module that needed it first.
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

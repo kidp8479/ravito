@@ -5,6 +5,28 @@ instead of forgotten ones. Unlike `docs/lessons.md` (mistakes already fixed),
 these are live: check here before "fixing" one by surprise, and update or
 remove the entry once it's actually resolved.
 
+## Household invite codes are stored in cleartext, not hashed
+
+`HouseholdInvite.code` (`backend/prisma/schema.prisma`, added in RAV-4) is a
+plain `String @unique`, unlike refresh tokens or passwords, which are only
+ever stored as a hash.
+
+**Why not fixed**: the code is a 72-bit CSPRNG value (`randomBytes(9)`, RAV-7)
+- impractical to brute-force even with the value in hand, and single-use
+(atomically claimed on join, RAV-7). It's meant to be shared (a household
+member hands it to whoever they're inviting), so it doesn't carry the same
+"must never be recoverable" requirement a password or session token does.
+Changing this now means a schema migration to revisit an RAV-4 decision,
+out of scope for the module that merely consumes it (RAV-7).
+
+**Consequence to watch for**: a database read access (backup leak, admin
+query) exposes every currently-valid invite code, letting whoever read it
+join those households before the code expires or gets used.
+
+**Resolves when**: this stops being acceptable for the trust model (e.g. if
+this becomes a hosted SaaS with third-party admins/support who shouldn't be
+able to join a household this way) - hash it like a refresh token then.
+
 ## The refresh cookie's `Secure` flag has no non-HTTPS escape hatch
 
 `AuthController`'s `setRefreshCookie` (`backend/src/auth/auth.controller.ts`)

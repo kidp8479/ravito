@@ -10,6 +10,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -22,7 +23,10 @@ import {
   HouseholdsService,
 } from './households.service';
 
-@UseGuards(JwtAuthGuard)
+// 10 req/min/IP (RAV-7): the join-by-code route accepts a guessable-format
+// secret, so it gets the same defense-in-depth as auth/'s routes even
+// though the code's entropy already makes brute-forcing impractical.
+@UseGuards(JwtAuthGuard, ThrottlerGuard)
 @Controller('households')
 export class HouseholdsController {
   constructor(private readonly households: HouseholdsService) {}
