@@ -33,6 +33,10 @@ roadmap), then `CONTRIBUTING.md` (day-to-day conventions).
   scaffold.
 - **Lessons**: after a course correction, record the pattern in
   `docs/lessons.md` so it is not repeated.
+- **Known limitations**: an accepted tradeoff or piece of tech debt (not a
+  mistake to fix, a deliberate "not now") goes in
+  `docs/known-limitations.md`, with why it's not fixed and what would
+  resolve it. Check it before "fixing" one by surprise.
 - **End of session**: post a recap to `#ravito-daily-log` on Slack and
   keep the Linear "Session Handoff" doc current (context does not carry
   between machines).
