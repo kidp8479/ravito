@@ -1,16 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
+import { ensureAuthLoaded } from '@/lib/api';
+import { getAuthState } from '@/lib/auth-store';
 
 export const Route = createFileRoute('/')({
-  component: HomePage,
+  beforeLoad: async () => {
+    await ensureAuthLoaded();
+    throw redirect({
+      to: getAuthState().status === 'authenticated' ? '/household' : '/login',
+    });
+  },
 });
-
-function HomePage() {
-  return (
-    <main className="flex min-h-svh flex-col items-center justify-center gap-2 p-8 text-center">
-      <h1 className="text-3xl font-semibold">Ravito</h1>
-      <p className="text-gray-500 dark:text-gray-400">
-        Shared household pantry and shopping list.
-      </p>
-    </main>
-  );
-}

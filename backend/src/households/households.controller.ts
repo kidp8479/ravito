@@ -19,6 +19,7 @@ import {
   HouseholdInvite,
   HouseholdMemberView,
   HouseholdsService,
+  HouseholdSummary,
 } from './households.service';
 
 // 10 req/min/IP (RAV-7): the join-by-code route accepts a guessable-format
@@ -28,6 +29,11 @@ import {
 @Controller('households')
 export class HouseholdsController {
   constructor(private readonly households: HouseholdsService) {}
+
+  @Get('mine')
+  async listMine(@CurrentUser() userId: string): Promise<HouseholdSummary[]> {
+    return this.households.listMine(userId);
+  }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)

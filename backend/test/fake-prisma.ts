@@ -224,17 +224,35 @@ export function createFakePrisma() {
           );
         },
       ),
-      findMany: jest.fn(({ where }: { where: { householdId: string } }) => {
-        const rows = [...membersByKey.values()]
-          .filter((member) => member.householdId === where.householdId)
-          .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime());
-        return Promise.resolve(
-          rows.map((member) => ({
-            ...member,
-            user: usersById.get(member.userId),
-          })),
-        );
-      }),
+      findMany: jest.fn(
+        ({ where }: { where: { householdId?: string; userId?: string } }) => {
+          const rows = [...membersByKey.values()]
+            .filter(
+              (member) =>
+                (where.householdId === undefined ||
+                  member.householdId === where.householdId) &&
+                (where.userId === undefined || member.userId === where.userId),
+            )
+            .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime());
+          return Promise.resolve(
+            rows.map((member) => {
+              const household = householdsById.get(member.householdId);
+              return {
+                ...member,
+                user: usersById.get(member.userId),
+                // Mirrors HouseholdsService.listMine's `select: { id, name }`
+                // - real Prisma would omit createdAt here too, and a fake
+                // that returned it regardless couldn't catch a select
+                // mismatch if the mapping code ever grew to read it.
+                household: household && {
+                  id: household.id,
+                  name: household.name,
+                },
+              };
+            }),
+          );
+        },
+      ),
       count: jest.fn(
         ({
           where,
