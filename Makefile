@@ -27,7 +27,7 @@ PROJECT := $(notdir $(CURDIR))
         lint lint-backend lint-frontend \
         lint-check lint-check-backend lint-check-frontend \
         typecheck typecheck-backend typecheck-frontend \
-        test build doc
+        test test-integration build doc
 
 help:
 	@echo "Setup"
@@ -62,6 +62,7 @@ help:
 	@echo "  lint[-check]     - ESLint, --fix (or check only) on backend + frontend"
 	@echo "  typecheck        - tsc on backend + frontend"
 	@echo "  test             - backend unit + e2e tests"
+	@echo "  test-integration - backend tests against a real db (needs 'make up')"
 	@echo "  build            - production build, backend + frontend"
 	@echo "  doc              - generate backend code docs (Compodoc) into docs/backend"
 
@@ -228,6 +229,12 @@ typecheck-frontend:
 test:
 	cd backend && npm run test
 	cd backend && npm run test:e2e
+
+# Runs inside the backend container: it needs the `db` hostname from the
+# compose network, since the db port isn't published to the host.
+test-integration:
+	$(COMPOSE) exec backend npx prisma migrate deploy
+	$(COMPOSE) exec backend npm run test:integration
 
 build:
 	cd backend && npm run build

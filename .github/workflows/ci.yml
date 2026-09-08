@@ -11,6 +11,20 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ravito
+          POSTGRES_PASSWORD: ravito
+          POSTGRES_DB: ravito
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ravito -d ravito"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,6 +49,12 @@ jobs:
       # placeholder when unset (see docs/lessons.md) - it's never actually
       # connected to, since PrismaService is mocked in every e2e spec.
       - run: npm run test:e2e
+      # The only step that hits the real `postgres` service above: it checks
+      # the schema's own constraints (composite PKs, FKs, cascade
+      # behaviour), which a mocked PrismaService can't exercise.
+      - run: npx prisma migrate deploy && npm run test:integration
+        env:
+          DATABASE_URL: postgresql://ravito:ravito@localhost:5432/ravito
       - run: npm run build
 
   frontend:
