@@ -1,0 +1,123 @@
+import { NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+
+// Thin per-model wrappers around PrismaService that make `householdId` a
+// required, positional argument instead of an easy-to-forget `where`
+// field - the tenant-isolation guarantee (CLAUDE.md: "No cross-household
+// query in application code") lives here once instead of being re-derived
+// at every call site. Not implemented as a generic Prisma Client Extension
+// ($extends): that would need to type `args`/`query` against Prisma's
+// per-operation generics, which only resolves to concrete input types with
+// unsafe casts under this project's typed-lint config - a plain wrapper
+// keeps every argument and return type exactly what Prisma generated.
+//
+// findUnique/update/delete below pass `{ id, householdId }` as the
+// `where`: Prisma's generated `WhereUniqueInput` allows any other filter
+// field alongside the unique one ("extended where on unique queries"), so
+// this doesn't just filter the result after the fact - a row from another
+// household genuinely doesn't match and comes back as not-found (P2025),
+// the same as a nonexistent id. Verified against real Postgres in
+// test/household-scoped.integration-spec.ts.
+//
+// update()'s `data` deliberately excludes `id` and `householdId`: Prisma's
+// *Unchecked*UpdateInput types (needed here to set FK scalars like
+// productId directly) list both as ordinary settable fields, so leaving
+// them in would let a caller silently move a row to another household by
+// passing `{ householdId: otherHouseholdId }` in `data` - the `where`
+// clause still finds the caller's own row, but the write itself would
+// re-point it.
+
+export function householdScopedProducts(
+  prisma: PrismaService,
+  householdId: string,
+) {
+  return {
+    findMany(
+      args: Omit<Prisma.ProductFindManyArgs, 'where'> & {
+        where?: Prisma.ProductWhereInput;
+      } = {},
+    ) {
+      return prisma.product.findMany({
+        ...args,
+        where: { ...args.where, householdId },
+      });
+    },
+    findUnique(id: string) {
+      return prisma.product.findUnique({ where: { id, householdId } });
+    },
+    create(data: Omit<Prisma.ProductUncheckedCreateInput, 'householdId'>) {
+      return prisma.product.create({ data: { ...data, householdId } });
+    },
+    update(
+      id: string,
+      data: Omit<Prisma.ProductUncheckedUpdateInput, 'id' | 'householdId'>,
+    ) {
+      return prisma.product.update({ where: { id, householdId }, data });
+    },
+    delete(id: string) {
+      return prisma.product.delete({ where: { id, householdId } });
+    },
+  };
+}
+
+export function householdScopedInventoryItems(
+  prisma: PrismaService,
+  householdId: string,
+) {
+  // InventoryItem.productId is a foreign key into Product, but the FK
+  // constraint alone only guarantees the referenced product exists
+  // *somewhere* - not that it belongs to this household. Without this
+  // check, create() would let household A create an InventoryItem that
+  // points at household B's product: an invisible cross-tenant reference
+  // this module exists specifically to prevent.
+  async function assertProductInHousehold(productId: string): Promise<void> {
+    const product = await prisma.product.findUnique({
+      where: { id: productId, householdId },
+    });
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+  }
+
+  return {
+    findMany(
+      args: Omit<Prisma.InventoryItemFindManyArgs, 'where'> & {
+        where?: Prisma.InventoryItemWhereInput;
+      } = {},
+    ) {
+      return prisma.inventoryItem.findMany({
+        ...args,
+        where: { ...args.where, householdId },
+      });
+    },
+    findUnique(id: string) {
+      return prisma.inventoryItem.findUnique({ where: { id, householdId } });
+    },
+    async create(
+      data: Omit<Prisma.InventoryItemUncheckedCreateInput, 'householdId'>,
+    ) {
+      await assertProductInHousehold(data.productId);
+      return prisma.inventoryItem.create({ data: { ...data, householdId } });
+    },
+    // productId is excluded here, not just householdId/id: an inventory
+    // row's identity (which product, in which household) isn't meant to
+    // change after creation - only quantity/unit are. That sidesteps
+    // needing the same cross-household productId check on every update.
+    update(
+      id: string,
+      data: Omit<
+        Prisma.InventoryItemUncheckedUpdateInput,
+        'id' | 'householdId' | 'productId'
+      >,
+    ) {
+      return prisma.inventoryItem.update({
+        where: { id, householdId },
+        data,
+      });
+    },
+    delete(id: string) {
+      return prisma.inventoryItem.delete({ where: { id, householdId } });
+    },
+  };
+}

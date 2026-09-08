@@ -1,48 +1,30 @@
 import { randomUUID } from 'crypto';
-import { PrismaService } from './../src/prisma/prisma.service';
+import { useIntegrationPrisma } from './integration-prisma';
 
 // Runs against a real Postgres (see Makefile `test-integration` / CI's
 // `postgres` service) - these constraints live in the schema, not in
 // application code, so mocking PrismaService (as every other spec does)
 // would test nothing here.
 describe('Prisma schema tenant constraints (integration)', () => {
-  const prisma = new PrismaService();
-  let householdIds: string[];
+  const { prisma, createHousehold } = useIntegrationPrisma();
   let userIds: string[];
   let auditLogIds: string[];
 
-  beforeAll(async () => {
-    await prisma.onModuleInit();
-  });
-
   beforeEach(() => {
-    householdIds = [];
     userIds = [];
     auditLogIds = [];
   });
 
   afterEach(async () => {
-    // No ordering constraint between these three: Household/User both
-    // cascade-delete HouseholdMember/HouseholdInvite regardless of which
-    // side is deleted first, and AuditLog has no FK to either.
+    // No ordering constraint between these two, or with the household
+    // cleanup useIntegrationPrisma already does: User cascade-deletes
+    // HouseholdMember/HouseholdInvite regardless of which side goes
+    // first, and AuditLog has no FK to either.
     await Promise.all([
-      prisma.household.deleteMany({ where: { id: { in: householdIds } } }),
       prisma.user.deleteMany({ where: { id: { in: userIds } } }),
       prisma.auditLog.deleteMany({ where: { id: { in: auditLogIds } } }),
     ]);
   });
-
-  afterAll(async () => {
-    await prisma.onModuleDestroy();
-  });
-
-  async function createHousehold() {
-    const household = await prisma.household.create({
-      data: { name: `Household ${randomUUID()}` },
-    });
-    householdIds.push(household.id);
-    return household;
-  }
 
   async function createUser(email = `${randomUUID()}@example.test`) {
     const user = await prisma.user.create({
