@@ -72,6 +72,7 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint:check
+      - run: npm run test
       # No separate typecheck step: build already gates on `tsc -b` before
       # `vite build` runs, so a standalone tsc pass here would just
       # duplicate it. `make typecheck-frontend` still exists for local use.

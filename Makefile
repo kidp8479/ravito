@@ -61,7 +61,7 @@ help:
 	@echo "  format[-check]   - Prettier, write (or check only) on backend + frontend"
 	@echo "  lint[-check]     - ESLint, --fix (or check only) on backend + frontend"
 	@echo "  typecheck        - tsc on backend + frontend"
-	@echo "  test             - backend unit + e2e tests"
+	@echo "  test             - backend unit + e2e tests, frontend unit tests"
 	@echo "  test-integration - backend tests against a real db (needs 'make up')"
 	@echo "  build            - production build, backend + frontend"
 	@echo "  doc              - generate backend code docs (Compodoc) into docs/backend"
@@ -229,6 +229,7 @@ typecheck-frontend:
 test:
 	cd backend && npm run test
 	cd backend && npm run test:e2e
+	cd frontend && npm run test
 
 # Runs inside the backend container: it needs the `db` hostname from the
 # compose network, since the db port isn't published to the host.
