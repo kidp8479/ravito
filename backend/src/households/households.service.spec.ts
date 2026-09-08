@@ -1,0 +1,236 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { PrismaService } from '../prisma/prisma.service';
+import {
+  recordNotFoundError,
+  uniqueConstraintError,
+} from '../../test/prisma-errors';
+import { HouseholdsService } from './households.service';
+
+// jest's `expect.any` is typed as returning `any`, which trips
+// @typescript-eslint/no-unsafe-assignment wherever it lands in a typed
+// object literal below - narrows the type back down instead (same
+// pattern as auth.service.spec.ts).
+function matchAny<T>(ctor: new (...args: never[]) => T): T {
+  return expect.any(ctor) as T;
+}
+
+describe('HouseholdsService', () => {
+  let service: HouseholdsService;
+  let prisma: {
+    household: { create: jest.Mock };
+    householdMember: {
+      create: jest.Mock;
+      findUnique: jest.Mock;
+      findMany: jest.Mock;
+      count: jest.Mock;
+      delete: jest.Mock;
+    };
+    householdInvite: {
+      create: jest.Mock;
+      findUnique: jest.Mock;
+      updateMany: jest.Mock;
+    };
+    $transaction: jest.Mock;
+  };
+
+  beforeEach(async () => {
+    prisma = {
+      household: { create: jest.fn() },
+      householdMember: {
+        create: jest.fn(),
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
+        delete: jest.fn(),
+      },
+      householdInvite: {
+        create: jest.fn(),
+        findUnique: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      // No real transactional semantics needed here: the callback just
+      // runs against the same mocked prisma, same as fake-prisma.ts.
+      $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
+        callback(prisma),
+      ),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        HouseholdsService,
+        { provide: PrismaService, useValue: prisma },
+      ],
+    }).compile();
+
+    service = module.get(HouseholdsService);
+  });
+
+  describe('create', () => {
+    it('creates the household with the caller as OWNER', async () => {
+      prisma.household.create.mockResolvedValue({ id: 'h1', name: 'Casa' });
+
+      const result = await service.create('user-1', 'Casa');
+
+      expect(prisma.household.create).toHaveBeenCalledWith({
+        data: {
+          name: 'Casa',
+          members: { create: { userId: 'user-1', role: 'OWNER' } },
+        },
+      });
+      expect(result).toEqual({ id: 'h1', name: 'Casa' });
+    });
+  });
+
+  describe('joinByCode', () => {
+    const invite = {
+      id: 'invite-1',
+      householdId: 'h1',
+      code: 'abc123',
+      expiresAt: new Date(Date.now() + 1000),
+      consumedAt: null,
+      createdById: 'user-1',
+    };
+
+    it('claims the invite and adds the caller as a MEMBER', async () => {
+      prisma.householdInvite.findUnique.mockResolvedValue(invite);
+
+      const result = await service.joinByCode('user-2', 'abc123');
+
+      expect(prisma.householdInvite.updateMany).toHaveBeenCalledWith({
+        where: { id: invite.id, consumedAt: null },
+        data: { consumedAt: matchAny(Date) },
+      });
+      expect(prisma.householdMember.create).toHaveBeenCalledWith({
+        data: { householdId: 'h1', userId: 'user-2', role: 'MEMBER' },
+      });
+      expect(result).toEqual({ householdId: 'h1' });
+    });
+
+    it('rejects an unknown code', async () => {
+      prisma.householdInvite.findUnique.mockResolvedValue(null);
+
+      await expect(service.joinByCode('user-2', 'nope')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('rejects an expired code', async () => {
+      prisma.householdInvite.findUnique.mockResolvedValue({
+        ...invite,
+        expiresAt: new Date(Date.now() - 1000),
+      });
+
+      await expect(
+        service.joinByCode('user-2', 'abc123'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects a code already claimed by a concurrent join', async () => {
+      prisma.householdInvite.findUnique.mockResolvedValue(invite);
+      prisma.householdInvite.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.joinByCode('user-2', 'abc123'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.householdMember.create).not.toHaveBeenCalled();
+    });
+
+    it('treats already being a member as success, not an error', async () => {
+      prisma.householdInvite.findUnique.mockResolvedValue(invite);
+      prisma.householdMember.create.mockRejectedValue(uniqueConstraintError());
+
+      const result = await service.joinByCode('user-2', 'abc123');
+
+      expect(result).toEqual({ householdId: 'h1' });
+    });
+
+    it('runs the claim and the membership create in the same transaction', async () => {
+      prisma.householdInvite.findUnique.mockResolvedValue(invite);
+
+      await service.joinByCode('user-2', 'abc123');
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('removeMember', () => {
+    it('allows a MEMBER to remove themself', async () => {
+      prisma.householdMember.findUnique.mockResolvedValue({ role: 'MEMBER' });
+
+      await service.removeMember('h1', 'user-1', 'user-1');
+
+      expect(prisma.householdMember.delete).toHaveBeenCalledWith({
+        where: { householdId_userId: { householdId: 'h1', userId: 'user-1' } },
+      });
+    });
+
+    it('allows the sole OWNER to leave when no other members remain', async () => {
+      prisma.householdMember.findUnique.mockResolvedValue({ role: 'OWNER' });
+      prisma.householdMember.count.mockResolvedValue(0); // no other members
+
+      await service.removeMember('h1', 'owner-1', 'owner-1');
+
+      expect(prisma.householdMember.delete).toHaveBeenCalled();
+    });
+
+    it('rejects the last OWNER leaving while other members remain', async () => {
+      prisma.householdMember.findUnique.mockResolvedValue({ role: 'OWNER' });
+      prisma.householdMember.count.mockImplementation(
+        ({ where }: { where: { role?: string } }) =>
+          // 1 other member; 0 other OWNERs.
+          Promise.resolve(where.role === 'OWNER' ? 0 : 1),
+      );
+
+      await expect(
+        service.removeMember('h1', 'owner-1', 'owner-1'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.householdMember.delete).not.toHaveBeenCalled();
+    });
+
+    it('allows one of several OWNERs to leave while other members remain', async () => {
+      prisma.householdMember.findUnique.mockResolvedValue({ role: 'OWNER' });
+      prisma.householdMember.count.mockImplementation(
+        ({ where }: { where: { role?: string } }) =>
+          // 1 other member, and it's another OWNER.
+          Promise.resolve(where.role === 'OWNER' ? 1 : 1),
+      );
+
+      await service.removeMember('h1', 'owner-1', 'owner-1');
+
+      expect(prisma.householdMember.delete).toHaveBeenCalled();
+    });
+
+    it('allows an OWNER to remove another member', async () => {
+      prisma.householdMember.findUnique.mockResolvedValue({ role: 'OWNER' });
+
+      await service.removeMember('h1', 'owner-1', 'user-2');
+
+      expect(prisma.householdMember.delete).toHaveBeenCalledWith({
+        where: { householdId_userId: { householdId: 'h1', userId: 'user-2' } },
+      });
+    });
+
+    it('rejects a non-OWNER trying to remove someone else', async () => {
+      prisma.householdMember.findUnique.mockResolvedValue({ role: 'MEMBER' });
+
+      await expect(
+        service.removeMember('h1', 'member-1', 'user-2'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.householdMember.delete).not.toHaveBeenCalled();
+    });
+
+    it('404s when the target is not actually a member', async () => {
+      prisma.householdMember.findUnique.mockResolvedValue({ role: 'OWNER' });
+      prisma.householdMember.delete.mockRejectedValue(recordNotFoundError());
+
+      await expect(
+        service.removeMember('h1', 'owner-1', 'user-2'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+});

@@ -1,12 +1,15 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { LoggerModule } from 'nestjs-pino';
 import { envValidationSchema } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
+import { CommonModule } from './common/common.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
+import { HouseholdsModule } from './households/households.module';
 
 @Module({
   imports: [
@@ -41,9 +44,18 @@ import { AuthModule } from './auth/auth.module';
         },
       }),
     }),
+    // 10 requests / minute per IP, applied per-controller via
+    // `@UseGuards(ThrottlerGuard)` (originally RAV-6, on auth/ only;
+    // households/'s join-by-code route needs the same defense against
+    // guessing, RAV-7). @nestjs/throttler's ThrottlerModule is itself
+    // @Global(), so this is reachable from every module regardless of
+    // where it's registered.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 10 }]),
     PrismaModule,
+    CommonModule,
     HealthModule,
     AuthModule,
+    HouseholdsModule,
   ],
 })
 export class AppModule implements NestModule {
