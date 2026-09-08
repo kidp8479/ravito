@@ -97,8 +97,8 @@ Architecture and flow diagrams that document the system live in
 - `<name>.excalidraw` is the **source of truth** (editable at
   excalidraw.com or with the VS Code Excalidraw extension).
 - `<name>.png` is the rendered view.
-- `<name>.py` (optional) regenerates it via the personal
-  `excalidraw-diagrams` skill.
+- `<name>.py` (optional) regenerates it via the vendored
+  `excalidraw-diagrams` skill (`.claude/skills/excalidraw-diagrams/`).
 
 Mirror each diagram in a **Linear document per domain** (e.g. "Auth -
 architecture" in the project, tagged with the domain label): embed the
@@ -232,6 +232,9 @@ gh auth login                                   # GitHub CLI
 
 Claude Code auto-loads `CLAUDE.md` and `.claude/skills/` from the repo
 root on clone, so an agent session started in this directory has the full
-context without any global config. The `mattpocock-skills` plugin and the
-`excalidraw-diagrams` skill are *not* vendored: install them globally if
-needed, or skip (diagrams can be drawn by hand at excalidraw.com).
+context without any global config. The `web-security-review` and
+`excalidraw-diagrams` skills are vendored under `.claude/skills/`;
+`excalidraw-diagrams` needs a one-time `npm install` in its `scripts/`
+directory (Playwright, for PNG rendering) and Python 3. The
+`mattpocock-skills` plugin is *not* vendored: install it globally if
+needed.
