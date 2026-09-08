@@ -7,25 +7,46 @@ import { PrismaClient } from '@prisma/client';
 // would test nothing here.
 describe('Prisma schema tenant constraints (integration)', () => {
   const prisma = new PrismaClient();
+  let householdIds: string[];
+  let userIds: string[];
+  let auditLogIds: string[];
+
+  beforeEach(() => {
+    householdIds = [];
+    userIds = [];
+    auditLogIds = [];
+  });
+
+  afterEach(async () => {
+    // Household deletion cascades to its members/invites, so deleting
+    // households first avoids relying on delete order for those two.
+    await prisma.household.deleteMany({ where: { id: { in: householdIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    await prisma.auditLog.deleteMany({ where: { id: { in: auditLogIds } } });
+  });
 
   afterAll(async () => {
     await prisma.$disconnect();
   });
 
   async function createHousehold() {
-    return prisma.household.create({
+    const household = await prisma.household.create({
       data: { name: `Household ${randomUUID()}` },
     });
+    householdIds.push(household.id);
+    return household;
   }
 
   async function createUser() {
-    return prisma.user.create({
+    const user = await prisma.user.create({
       data: {
         email: `${randomUUID()}@example.test`,
         passwordHash: 'x',
         displayName: 'Test user',
       },
     });
+    userIds.push(user.id);
+    return user;
   }
 
   it('rejects a duplicate (householdId, userId) membership', async () => {
@@ -43,12 +64,26 @@ describe('Prisma schema tenant constraints (integration)', () => {
     ).rejects.toThrow();
   });
 
-  it('rejects a membership pointing at a non-existent household or user', async () => {
+  it('rejects a membership pointing at a non-existent household', async () => {
     const user = await createUser();
 
     await expect(
       prisma.householdMember.create({
         data: { householdId: randomUUID(), userId: user.id, role: 'OWNER' },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('rejects a membership pointing at a non-existent user', async () => {
+    const household = await createHousehold();
+
+    await expect(
+      prisma.householdMember.create({
+        data: {
+          householdId: household.id,
+          userId: randomUUID(),
+          role: 'OWNER',
+        },
       }),
     ).rejects.toThrow();
   });
@@ -93,6 +128,7 @@ describe('Prisma schema tenant constraints (integration)', () => {
         entityId: randomUUID(),
       },
     });
+    auditLogIds.push(log.id);
 
     await prisma.user.delete({ where: { id: user.id } });
 
