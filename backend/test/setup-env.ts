@@ -9,3 +9,4 @@ import 'dotenv/config';
 // comes from docker-compose instead).
 process.env.DATABASE_URL ??=
   'postgresql://placeholder:placeholder@localhost:5432/placeholder';
+process.env.JWT_ACCESS_SECRET ??= 'placeholder-jwt-access-secret-32-chars';
