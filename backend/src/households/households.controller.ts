@@ -7,13 +7,11 @@ import {
   HttpStatus,
   Param,
   Post,
-  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import type { Request } from 'express';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { HouseholdMembershipGuard } from '../common/guards/household-membership.guard';
 import { CreateHouseholdDto } from './dto/create-household.dto';
 import { JoinHouseholdDto } from './dto/join-household.dto';
@@ -34,20 +32,18 @@ export class HouseholdsController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(
-    @Req() req: Request,
+    @CurrentUser() userId: string,
     @Body() dto: CreateHouseholdDto,
   ): Promise<{ id: string; name: string }> {
-    const { sub: userId } = req.user as JwtPayload;
     return this.households.create(userId, dto.name);
   }
 
   @Post('join')
   @HttpCode(HttpStatus.OK)
   async join(
-    @Req() req: Request,
+    @CurrentUser() userId: string,
     @Body() dto: JoinHouseholdDto,
   ): Promise<{ householdId: string }> {
-    const { sub: userId } = req.user as JwtPayload;
     return this.households.joinByCode(userId, dto.code);
   }
 
@@ -56,9 +52,8 @@ export class HouseholdsController {
   @HttpCode(HttpStatus.CREATED)
   async createInvite(
     @Param('id') householdId: string,
-    @Req() req: Request,
+    @CurrentUser() userId: string,
   ): Promise<HouseholdInvite> {
-    const { sub: userId } = req.user as JwtPayload;
     return this.households.createInvite(householdId, userId);
   }
 
@@ -76,9 +71,8 @@ export class HouseholdsController {
   async removeMember(
     @Param('id') householdId: string,
     @Param('userId') targetUserId: string,
-    @Req() req: Request,
+    @CurrentUser() callerId: string,
   ): Promise<void> {
-    const { sub: callerId } = req.user as JwtPayload;
     await this.households.removeMember(householdId, callerId, targetUserId);
   }
 }

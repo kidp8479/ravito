@@ -1,9 +1,9 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
+import { uniqueConstraintError } from '../../test/prisma-errors';
 import { AuthService } from './auth.service';
 
 // jest's own types make `expect.any`/`expect.objectContaining` return
@@ -107,12 +107,7 @@ describe('AuthService', () => {
 
     it('rejects a concurrent duplicate insert (P2002) with a 409, not an unhandled 500', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
-      prisma.user.create.mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-          code: 'P2002',
-          clientVersion: 'test',
-        }),
-      );
+      prisma.user.create.mockRejectedValue(uniqueConstraintError());
 
       await expect(
         service.register({

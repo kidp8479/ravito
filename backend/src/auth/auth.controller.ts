@@ -18,10 +18,10 @@ import {
   REFRESH_COOKIE_PATH,
   REFRESH_TOKEN_TTL_MS,
 } from './auth.constants';
+import { CurrentUser } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { JwtPayload } from './strategies/jwt.strategy';
 
 @UseGuards(ThrottlerGuard)
 @Controller('auth')
@@ -81,8 +81,7 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  async me(@Req() req: Request): Promise<PublicUser> {
-    const { sub: userId } = req.user as JwtPayload;
+  async me(@CurrentUser() userId: string): Promise<PublicUser> {
     const user = await this.auth.getPublicUser(userId);
     if (!user) {
       // The access token is still validly signed and unexpired; the user
