@@ -49,6 +49,24 @@ describe('Prisma schema tenant constraints (integration)', () => {
     return user;
   }
 
+  it('rejects an email that differs from an existing one only by case', async () => {
+    const email = `${randomUUID()}@example.test`;
+    const user = await prisma.user.create({
+      data: { email, passwordHash: 'x', displayName: 'Test user' },
+    });
+    userIds.push(user.id);
+
+    await expect(
+      prisma.user.create({
+        data: {
+          email: email.toUpperCase(),
+          passwordHash: 'x',
+          displayName: 'Test user',
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
   it('rejects a duplicate (householdId, userId) membership', async () => {
     const household = await createHousehold();
     const user = await createUser();

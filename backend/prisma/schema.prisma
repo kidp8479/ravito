@@ -23,6 +23,12 @@ enum HouseholdRole {
 
 model User {
   id           String   @id @default(cuid())
+  // Case-sensitive uniqueness here; a case-insensitive guard also exists as
+  // a raw `lower(email)` unique index added by hand in the
+  // add_case_insensitive_email_index migration, since Prisma's schema DSL
+  // has no expression-index syntax. That index isn't representable here,
+  // so it won't show up in `prisma migrate diff` - don't let a future
+  // `prisma migrate dev` "helpfully" generate a DROP INDEX for it.
   email        String   @unique
   passwordHash String
   displayName  String
@@ -51,6 +57,7 @@ model HouseholdMember {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([householdId, userId])
+  @@index([userId])
 }
 
 model HouseholdInvite {
@@ -63,6 +70,9 @@ model HouseholdInvite {
 
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   createdBy User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@index([createdById])
 }
 
 model AuditLog {
