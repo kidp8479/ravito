@@ -59,6 +59,11 @@ describe('Auth (e2e)', () => {
       cookie.startsWith('refresh_token='),
     );
     expect(setCookieHeader).toMatch(/HttpOnly/);
+    // Cookie path matching is prefix-based: a browser only sends this
+    // cookie to /auth/logout because the Path is `/auth`, not
+    // `/auth/refresh` - the latter would silently break logout's
+    // server-side revocation for every real browser (RAV-6 code review).
+    expect(setCookieHeader).toMatch(/Path=\/auth;/);
     let refreshCookie = extractSetCookie(registerRes, 'refresh_token');
 
     const meRes = await request(server)

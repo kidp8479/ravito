@@ -1,6 +1,7 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
@@ -45,7 +46,9 @@ describe('AuthService', () => {
         create: jest.fn().mockResolvedValue({ id: 'refresh-1' }),
         findUnique: jest.fn(),
         update: jest.fn(),
-        updateMany: jest.fn(),
+        // Default to "won the atomic claim" - the happy path for
+        // refresh(); tests for the losing/reuse branch override this.
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
 
@@ -73,6 +76,13 @@ describe('AuthService', () => {
         displayName: 'Alice',
       });
 
+      // Guards against a regression that drops `.toLowerCase()` from just
+      // one of the two places email is read/written: the uniqueness check
+      // itself has to run against the normalized email too, or
+      // 'Alice@x.com' and 'alice@x.com' could both slip past it.
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { email: 'alice@example.com' },
+      });
       expect(prisma.user.create).toHaveBeenCalledWith(
         matchObjectContaining({
           data: matchObjectContaining({ email: 'alice@example.com' }),
@@ -94,6 +104,24 @@ describe('AuthService', () => {
       ).rejects.toBeInstanceOf(ConflictException);
       expect(prisma.user.create).not.toHaveBeenCalled();
     });
+
+    it('rejects a concurrent duplicate insert (P2002) with a 409, not an unhandled 500', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
+      );
+
+      await expect(
+        service.register({
+          email: user.email,
+          password: 'a-strong-password',
+          displayName: 'Alice',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
   });
 
   describe('login', () => {
@@ -106,6 +134,19 @@ describe('AuthService', () => {
       });
 
       expect(tokens.accessToken).toBeDefined();
+    });
+
+    it('normalizes the email before looking the user up', async () => {
+      prisma.user.findUnique.mockResolvedValue(user);
+
+      await service.login({
+        email: 'Alice@Example.com',
+        password: 'correct-password',
+      });
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { email: 'alice@example.com' },
+      });
     });
 
     it('rejects a wrong password with a generic error', async () => {
@@ -143,9 +184,13 @@ describe('AuthService', () => {
       const tokens = await service.refresh('raw-refresh-token');
 
       expect(tokens.accessToken).toBeDefined();
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { id: stored.id, revokedAt: null },
+        data: { revokedAt: matchAny(Date) },
+      });
       expect(prisma.refreshToken.update).toHaveBeenCalledWith({
         where: { id: stored.id },
-        data: { revokedAt: matchAny(Date), replacedByTokenId: 'refresh-2' },
+        data: { replacedByTokenId: 'refresh-2' },
       });
     });
 
@@ -162,9 +207,13 @@ describe('AuthService', () => {
         id: 'refresh-1',
         userId: user.id,
         tokenHash: 'hash',
-        revokedAt: new Date(),
+        revokedAt: null, // as far as the initial read knows
         expiresAt: new Date(Date.now() + 1000),
       });
+      // The atomic claim below is what actually detects reuse: this
+      // token was already revoked by the time it's attempted, so the
+      // conditional update matches nothing.
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
 
       await expect(service.refresh('stolen-token')).rejects.toBeInstanceOf(
         UnauthorizedException,
@@ -173,6 +222,24 @@ describe('AuthService', () => {
         where: { userId: user.id, revokedAt: null },
         data: { revokedAt: matchAny(Date) },
       });
+    });
+
+    it('treats losing the rotation race against a concurrent refresh the same way', async () => {
+      // Two requests presenting the *same still-valid* token both reach
+      // the atomic claim; only one can win it (see the comment in
+      // AuthService.refresh). This is that race's loser.
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'refresh-1',
+        userId: user.id,
+        tokenHash: 'hash',
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 1000),
+      });
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.refresh('raced-token')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
     });
 
     it('rejects an expired token', async () => {

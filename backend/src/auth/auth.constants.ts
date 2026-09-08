@@ -7,7 +7,8 @@ export const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, ADR 00
 
 export const REFRESH_COOKIE_NAME = 'refresh_token';
 
-// Scoped to the one endpoint that reads it (ADR 0002) - the browser never
-// attaches it to any other request, so no other route needs to defend
-// against it being forged.
-export const REFRESH_COOKIE_PATH = '/auth/refresh';
+// Scoped to the two endpoints that read it, refresh and logout (ADR 0002) -
+// cookie path matching is prefix-based, so `/auth/refresh` alone would
+// silently stop the browser from ever sending it to `/auth/logout`. No
+// route outside `/auth` needs to defend against it being forged.
+export const REFRESH_COOKIE_PATH = '/auth';

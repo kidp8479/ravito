@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import { ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL_MS } from './auth.constants';
@@ -49,11 +50,25 @@ export class AuthService {
     }
 
     const passwordHash = await argon2.hash(dto.password);
-    const user = await this.prisma.user.create({
-      data: { email, passwordHash, displayName: dto.displayName },
-    });
 
-    return this.issueTokens(user.id);
+    try {
+      const user = await this.prisma.user.create({
+        data: { email, passwordHash, displayName: dto.displayName },
+      });
+      return this.issueTokens(user.id);
+    } catch (error) {
+      // The findUnique above is a fast path, not the actual guarantee: two
+      // concurrent registrations for the same email can both pass it before
+      // either insert commits, so the DB's own unique constraint is what
+      // catches that case, as a P2002 here rather than a 409.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('Email already in use');
+      }
+      throw error;
+    }
   }
 
   async login(dto: LoginDto): Promise<AuthTokens> {
@@ -84,7 +99,24 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    if (stored.revokedAt) {
+    if (stored.expiresAt < new Date()) {
+      throw new UnauthorizedException('Refresh token expired');
+    }
+
+    // Atomically claim this token before doing anything else: the `where`
+    // clause only matches (and the update only takes effect) if nobody has
+    // revoked it yet, so of two concurrent refresh calls presenting the
+    // same token, exactly one can win this. A plain read-then-write here
+    // would let both callers pass a `revokedAt === null` check and both
+    // rotate, defeating the reuse-detection guarantee under a race.
+    const { count } = await this.prisma.refreshToken.updateMany({
+      where: { id: stored.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    if (count === 0) {
+      // Lost the race, or this is a genuinely reused (already-revoked)
+      // token - either way, ADR 0002 treats it as theft.
       await this.prisma.refreshToken.updateMany({
         where: { userId: stored.userId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -92,18 +124,18 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token reuse detected');
     }
 
-    if (stored.expiresAt < new Date()) {
-      throw new UnauthorizedException('Refresh token expired');
-    }
+    const [accessToken, { raw: refreshToken, id: newTokenId }] =
+      await Promise.all([
+        this.signAccessToken(stored.userId),
+        this.createRefreshToken(stored.userId),
+      ]);
 
-    const accessToken = await this.signAccessToken(stored.userId);
-    const { raw: refreshToken, id: newTokenId } = await this.createRefreshToken(
-      stored.userId,
-    );
-
+    // Best-effort bookkeeping, not part of the security guarantee above
+    // (which is already final by this point): links the chain for
+    // reuse-detection audit trails.
     await this.prisma.refreshToken.update({
       where: { id: stored.id },
-      data: { revokedAt: new Date(), replacedByTokenId: newTokenId },
+      data: { replacedByTokenId: newTokenId },
     });
 
     return { accessToken, refreshToken };

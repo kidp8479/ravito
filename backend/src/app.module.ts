@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import { LoggerModule } from 'nestjs-pino';
 import { envValidationSchema } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
@@ -47,10 +48,12 @@ import { AuthModule } from './auth/auth.module';
 })
 export class AppModule implements NestModule {
   // Wired here, not in main.ts: a NestApplication created by the testing
-  // module (every e2e spec) skips main.ts's bootstrap() entirely, and the
-  // refresh cookie (ADR 0002) needs this middleware to read req.cookies
-  // regardless of how the app was created.
+  // module (every e2e spec) skips main.ts's bootstrap() entirely, and
+  // both the refresh cookie (ADR 0002, needs req.cookies) and the
+  // security headers below need to apply regardless of how the app was
+  // created - the same gap that let helmet() ship untested in RAV-6's
+  // security review, until it moved here alongside cookie-parser.
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(cookieParser()).forRoutes('*');
+    consumer.apply(cookieParser(), helmet()).forRoutes('*');
   }
 }

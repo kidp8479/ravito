@@ -32,6 +32,20 @@ describe('Health (e2e)', () => {
       });
   });
 
+  it('sends helmet security headers on every response', () => {
+    // helmet() is wired in AppModule.configure(), not main.ts's
+    // bootstrap() - every e2e spec skips bootstrap(), so this is the
+    // only thing that would catch a regression removing it (RAV-6
+    // security review).
+    return request(app.getHttpServer())
+      .get('/healthz')
+      .expect(200)
+      .expect('x-content-type-options', 'nosniff')
+      .expect((res) => {
+        expect(res.headers['x-powered-by']).toBeUndefined();
+      });
+  });
+
   afterEach(async () => {
     await app.close();
   });

@@ -4,7 +4,6 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  NotFoundException,
   Post,
   Req,
   Res,
@@ -57,7 +56,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ accessToken: string }> {
-    const rawToken = req.cookies[REFRESH_COOKIE_NAME] as string | undefined;
+    const rawToken = getRefreshCookie(req);
     if (!rawToken) {
       throw new UnauthorizedException('Missing refresh token');
     }
@@ -73,7 +72,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
-    const rawToken = req.cookies[REFRESH_COOKIE_NAME] as string | undefined;
+    const rawToken = getRefreshCookie(req);
     if (rawToken) {
       await this.auth.logout(rawToken);
     }
@@ -86,10 +85,19 @@ export class AuthController {
     const { sub: userId } = req.user as JwtPayload;
     const user = await this.auth.getPublicUser(userId);
     if (!user) {
-      throw new NotFoundException('User not found');
+      // The access token is still validly signed and unexpired; the user
+      // it names was deleted after issuance. Every other auth failure in
+      // this controller is a 401, not a 404, so a frontend session guard
+      // keyed on 401 handles this the same way as any other invalid
+      // session instead of needing a special case.
+      throw new UnauthorizedException('User not found');
     }
     return user;
   }
+}
+
+function getRefreshCookie(req: Request): string | undefined {
+  return req.cookies[REFRESH_COOKIE_NAME] as string | undefined;
 }
 
 function setRefreshCookie(res: Response, refreshToken: string): void {
