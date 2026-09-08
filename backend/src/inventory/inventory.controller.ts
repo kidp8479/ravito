@@ -10,7 +10,6 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { InventoryItem } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { HouseholdMembershipGuard } from '../common/guards/household-membership.guard';
 import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
@@ -27,7 +26,7 @@ export class InventoryController {
   create(
     @Param('id') householdId: string,
     @Body() dto: CreateInventoryItemDto,
-  ): Promise<InventoryItem> {
+  ): Promise<InventoryItemView> {
     return this.inventory.create(householdId, dto);
   }
 
@@ -41,7 +40,7 @@ export class InventoryController {
     @Param('id') householdId: string,
     @Param('itemId') itemId: string,
     @Body() dto: UpdateInventoryItemDto,
-  ): Promise<InventoryItem> {
+  ): Promise<InventoryItemView> {
     return this.inventory.update(householdId, itemId, dto);
   }
 

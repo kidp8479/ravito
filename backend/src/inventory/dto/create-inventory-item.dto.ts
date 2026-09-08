@@ -1,7 +1,8 @@
-import { IsNumber, IsString, Length, Min } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsString, Length, Min } from 'class-validator';
 
 export class CreateInventoryItemDto {
   @IsString()
+  @IsNotEmpty()
   productId!: string;
 
   @IsNumber()

@@ -75,11 +75,14 @@ export function householdScopedInventoryItems(
   // *somewhere* - not that it belongs to this household. Without this
   // check, create() would let household A create an InventoryItem that
   // points at household B's product: an invisible cross-tenant reference
-  // this module exists specifically to prevent.
+  // this module exists specifically to prevent. Reuses
+  // householdScopedProducts' own findUnique rather than re-deriving the
+  // same scoped lookup here.
   async function assertProductInHousehold(productId: string): Promise<void> {
-    const product = await prisma.product.findUnique({
-      where: { id: productId, householdId },
-    });
+    const product = await householdScopedProducts(
+      prisma,
+      householdId,
+    ).findUnique(productId);
     if (!product) {
       throw new NotFoundException('Product not found');
     }
@@ -94,8 +97,14 @@ export function householdScopedInventoryItems(
         where: { ...args.where, householdId },
       }) as Prisma.PrismaPromise<Prisma.InventoryItemGetPayload<T>[]>;
     },
-    findUnique(id: string) {
-      return prisma.inventoryItem.findUnique({ where: { id, householdId } });
+    findUnique<T extends Omit<Prisma.InventoryItemFindUniqueArgs, 'where'>>(
+      id: string,
+      args: T = {} as T,
+    ): Prisma.PrismaPromise<Prisma.InventoryItemGetPayload<T> | null> {
+      return prisma.inventoryItem.findUnique({
+        ...args,
+        where: { id, householdId },
+      }) as Prisma.PrismaPromise<Prisma.InventoryItemGetPayload<T> | null>;
     },
     async create(
       data: Omit<Prisma.InventoryItemUncheckedCreateInput, 'householdId'>,

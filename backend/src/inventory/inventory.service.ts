@@ -3,8 +3,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InventoryItem, ProductCategory } from '@prisma/client';
+import { ProductCategory } from '@prisma/client';
 import {
+  isForeignKeyError,
   isRecordNotFoundError,
   isUniqueConstraintError,
 } from '../common/prisma/errors';
@@ -26,6 +27,14 @@ export interface InventoryItemView {
   };
 }
 
+const PRODUCT_VIEW_INCLUDE = {
+  include: {
+    product: {
+      select: { id: true, name: true, category: true, defaultUnit: true },
+    },
+  },
+} as const;
+
 @Injectable()
 export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
@@ -33,29 +42,33 @@ export class InventoryService {
   async create(
     householdId: string,
     dto: CreateInventoryItemDto,
-  ): Promise<InventoryItem> {
+  ): Promise<InventoryItemView> {
+    const scoped = householdScopedInventoryItems(this.prisma, householdId);
+    let itemId: string;
     try {
-      return await householdScopedInventoryItems(
-        this.prisma,
-        householdId,
-      ).create(dto);
+      itemId = (await scoped.create(dto)).id;
     } catch (error) {
       if (isUniqueConstraintError(error)) {
         throw new ConflictException(
           'This product is already in the inventory - update its quantity instead',
         );
       }
+      // The product existed when assertProductInHousehold checked, but
+      // was deleted before this insert committed (household-scoped.ts) -
+      // functionally the same as "not found".
+      if (isForeignKeyError(error)) {
+        throw new NotFoundException('Product not found');
+      }
       throw error;
     }
+    return this.getView(householdId, itemId);
   }
 
+  // Same shape as create()'s return: a caller that reads item.product off
+  // one response shouldn't get a different shape from the other.
   list(householdId: string): Promise<InventoryItemView[]> {
     return householdScopedInventoryItems(this.prisma, householdId).findMany({
-      include: {
-        product: {
-          select: { id: true, name: true, category: true, defaultUnit: true },
-        },
-      },
+      ...PRODUCT_VIEW_INCLUDE,
       orderBy: { updatedAt: 'desc' },
     });
   }
@@ -64,18 +77,19 @@ export class InventoryService {
     householdId: string,
     itemId: string,
     dto: UpdateInventoryItemDto,
-  ): Promise<InventoryItem> {
+  ): Promise<InventoryItemView> {
     try {
-      return await householdScopedInventoryItems(
-        this.prisma,
-        householdId,
-      ).update(itemId, dto);
+      await householdScopedInventoryItems(this.prisma, householdId).update(
+        itemId,
+        dto,
+      );
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         throw new NotFoundException('Inventory item not found');
       }
       throw error;
     }
+    return this.getView(householdId, itemId);
   }
 
   async remove(householdId: string, itemId: string): Promise<void> {
@@ -89,5 +103,19 @@ export class InventoryService {
       }
       throw error;
     }
+  }
+
+  private async getView(
+    householdId: string,
+    itemId: string,
+  ): Promise<InventoryItemView> {
+    const item = await householdScopedInventoryItems(
+      this.prisma,
+      householdId,
+    ).findUnique(itemId, PRODUCT_VIEW_INCLUDE);
+    if (!item) {
+      throw new NotFoundException('Inventory item not found');
+    }
+    return item;
   }
 }

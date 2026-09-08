@@ -22,3 +22,17 @@ export function isRecordNotFoundError(
     error.code === 'P2025'
   );
 }
+
+// A write's foreign key target vanished between the application-level
+// check that confirmed it existed and the write itself (e.g.
+// InventoryItem.create's assertProductInHousehold vs. a concurrent
+// delete of that product) - treated the same as "not found", since
+// that's what it now is.
+export function isForeignKeyError(
+  error: unknown,
+): error is Prisma.PrismaClientKnownRequestError {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2003'
+  );
+}

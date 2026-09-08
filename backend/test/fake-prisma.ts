@@ -472,6 +472,16 @@ export function createFakePrisma() {
             throw recordNotFoundError();
           }
           productsById.delete(product.id);
+          // Mirrors the schema's InventoryItem.productId onDelete: Cascade
+          // (backend/prisma/schema.prisma) - without this, a deleted
+          // product's inventory rows would linger here while real
+          // Postgres removes them, letting a test pass against this fake
+          // and fail against the real thing.
+          for (const item of inventoryItemsById.values()) {
+            if (item.productId === product.id) {
+              inventoryItemsById.delete(item.id);
+            }
+          }
           return Promise.resolve(product);
         },
       ),
@@ -501,11 +511,23 @@ export function createFakePrisma() {
         },
       ),
       findUnique: jest.fn(
-        ({ where }: { where: { id: string; householdId?: string } }) => {
+        ({
+          where,
+          include,
+        }: {
+          where: { id: string; householdId?: string };
+          include?: { product?: unknown };
+        }) => {
           const item = inventoryItemsById.get(where.id);
-          return Promise.resolve(
-            item && matchesWhere(item, where) ? item : null,
-          );
+          if (!item || !matchesWhere(item, where)) {
+            return Promise.resolve(null);
+          }
+          return Promise.resolve({
+            ...item,
+            ...(include?.product
+              ? { product: productsById.get(item.productId) }
+              : {}),
+          });
         },
       ),
       create: jest.fn(

@@ -2,10 +2,19 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  foreignKeyError,
   recordNotFoundError,
   uniqueConstraintError,
 } from '../../test/prisma-errors';
 import { InventoryService } from './inventory.service';
+
+const VIEW_INCLUDE = {
+  include: {
+    product: {
+      select: { id: true, name: true, category: true, defaultUnit: true },
+    },
+  },
+};
 
 describe('InventoryService', () => {
   let service: InventoryService;
@@ -43,12 +52,14 @@ describe('InventoryService', () => {
   });
 
   describe('create', () => {
-    it('creates an item once the product is confirmed in this household', async () => {
+    it('creates an item and returns it joined with its product', async () => {
       prisma.product.findUnique.mockResolvedValue({
         id: 'p1',
         householdId: 'h1',
       });
       prisma.inventoryItem.create.mockResolvedValue({ id: 'i1' });
+      const view = { id: 'i1', quantity: 2, unit: 'L', product: { id: 'p1' } };
+      prisma.inventoryItem.findUnique.mockResolvedValue(view);
 
       const result = await service.create('h1', {
         productId: 'p1',
@@ -59,7 +70,11 @@ describe('InventoryService', () => {
       expect(prisma.inventoryItem.create).toHaveBeenCalledWith({
         data: { productId: 'p1', quantity: 2, unit: 'L', householdId: 'h1' },
       });
-      expect(result).toEqual({ id: 'i1' });
+      expect(prisma.inventoryItem.findUnique).toHaveBeenCalledWith({
+        ...VIEW_INCLUDE,
+        where: { id: 'i1', householdId: 'h1' },
+      });
+      expect(result).toEqual(view);
     });
 
     it("404s when the product isn't in this household", async () => {
@@ -82,6 +97,18 @@ describe('InventoryService', () => {
         service.create('h1', { productId: 'p1', quantity: 2, unit: 'L' }),
       ).rejects.toBeInstanceOf(ConflictException);
     });
+
+    it('maps the product vanishing mid-request (FK violation) to 404', async () => {
+      prisma.product.findUnique.mockResolvedValue({
+        id: 'p1',
+        householdId: 'h1',
+      });
+      prisma.inventoryItem.create.mockRejectedValue(foreignKeyError());
+
+      await expect(
+        service.create('h1', { productId: 'p1', quantity: 2, unit: 'L' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
   });
 
   describe('list', () => {
@@ -103,6 +130,20 @@ describe('InventoryService', () => {
   });
 
   describe('update', () => {
+    it('updates and returns the item joined with its product', async () => {
+      prisma.inventoryItem.update.mockResolvedValue({ id: 'i1' });
+      const view = { id: 'i1', quantity: 5, unit: 'L', product: { id: 'p1' } };
+      prisma.inventoryItem.findUnique.mockResolvedValue(view);
+
+      const result = await service.update('h1', 'i1', { quantity: 5 });
+
+      expect(prisma.inventoryItem.update).toHaveBeenCalledWith({
+        where: { id: 'i1', householdId: 'h1' },
+        data: { quantity: 5 },
+      });
+      expect(result).toEqual(view);
+    });
+
     it('maps a missing item to 404', async () => {
       prisma.inventoryItem.update.mockRejectedValue(recordNotFoundError());
 
