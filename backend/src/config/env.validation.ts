@@ -20,6 +20,10 @@ export const envValidationSchema = Joi.object({
   // CORS allowed origin for the SPA, defaulting to the local Vite dev server.
   FRONTEND_ORIGIN: Joi.string().uri().default('http://localhost:5173'),
 
+  // Symmetric signing key for access tokens (ADR 0002). 32 chars minimum so
+  // a trivially short secret can't slip into an env file unnoticed.
+  JWT_ACCESS_SECRET: Joi.string().min(32).required(),
+
   LOG_LEVEL: Joi.string()
     .valid('fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent')
     .default('info'),

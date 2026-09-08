@@ -5,31 +5,25 @@ instead of forgotten ones. Unlike `docs/lessons.md` (mistakes already fixed),
 these are live: check here before "fixing" one by surprise, and update or
 remove the entry once it's actually resolved.
 
-## Email uniqueness is case-insensitive via a hand-written index, not the schema
+## The refresh cookie's `Secure` flag has no non-HTTPS escape hatch
 
-`backend/prisma/schema.prisma`'s `User.email` is a plain case-sensitive
-`@unique`. Case-insensitive uniqueness (`Alice@x.com` and `alice@x.com` can't
-both exist) is enforced by a second, hand-written index
-(`CREATE UNIQUE INDEX "User_email_lower_key" ON "User" (lower(email))`) added
-directly in the `add_case_insensitive_email_index` migration.
+`AuthController`'s `setRefreshCookie` (`backend/src/auth/auth.controller.ts`)
+hardcodes `secure: true` unconditionally, per ADR 0002. `localhost` is a
+browser-recognized secure context, so local dev over plain HTTP works, but
+any other non-HTTPS host (a staging deploy before TLS is wired up, reaching
+the dev backend by its LAN IP or hostname instead of literal `localhost`)
+would never receive the cookie at all: browsers refuse to store a `Secure`
+cookie outside HTTPS or the localhost/loopback exception.
 
-**Why not fixed properly**: the clean fix is a Postgres `citext` column, but
-that needs Prisma's `postgresqlExtensions` preview feature, still preview
-years after introduction - too much risk for how little it buys here.
-Normalizing email to lowercase at the write boundary would avoid needing a
-DB-level guard at all, but there's no write boundary yet (RAV-6, auth
-endpoints, isn't built).
+**Why not fixed**: making it environment-conditional (`secure: NODE_ENV ===
+'production'`) would quietly reopen the XSS-cookie-theft mitigation ADR
+0002 chose `Secure` for, on nothing more than a `NODE_ENV` value being
+right - too easy to get wrong for what it buys. No deployment target hits
+this yet (compose dev is `localhost`; there is no staging environment).
 
-**Consequence to watch for**: the index has no `schema.prisma` counterpart,
-so `prisma migrate diff` / `migrate dev` can't see it and may one day
-generate a migration that drops "User_email_lower_key" as an "unrecognized"
-object. There's a warning comment on `User.email` and in the migration file,
-but no automated check backs it up.
-
-**Resolves when**: RAV-6 (auth endpoints) either normalizes email to
-lowercase on write (making the raw index redundant, safe to drop), or
-`postgresqlExtensions` graduates out of preview and a `citext` migration
-replaces it.
+**Resolves when**: a real non-`localhost`, non-HTTPS deployment target
+shows up (staging without TLS, LAN testing) - decide deliberately then
+whether that target gets TLS instead, rather than loosening this cookie.
 
 ## Postgres image/credentials are duplicated between `docker-compose.yml` and CI
 

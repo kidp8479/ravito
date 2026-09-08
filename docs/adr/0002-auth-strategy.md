@@ -53,11 +53,15 @@ instead of deleting it - a reused (already-revoked) refresh token is
 treated as a signal of theft and revokes the entire chain for that user.
 
 **Refresh token transport: httpOnly, `Secure`, `SameSite=Strict` cookie**,
-scoped to the `/auth/refresh` path only. Not readable from JS (mitigates
-XSS exfiltration), not sent on cross-site requests (`SameSite=Strict`
-mitigates CSRF for the one endpoint that reads it) - no separate CSRF
-token needed as a result, since no other state-changing endpoint accepts
-cookie-based auth (everything else requires the `Bearer` access token).
+scoped to the `/auth` path (not just `/auth/refresh`: `POST /auth/logout`
+also needs to read it to revoke the token server-side - cookie path
+matching in browsers is prefix-based, not "this exact route", so scoping
+to `/auth/refresh` alone would silently stop the cookie ever reaching
+`/auth/logout`). Not readable from JS (mitigates XSS exfiltration), not
+sent on cross-site requests (`SameSite=Strict` mitigates CSRF for the two
+endpoints that read it) - no separate CSRF token needed as a result,
+since no other state-changing endpoint accepts cookie-based auth
+(everything else requires the `Bearer` access token).
 
 **Logout**: `POST /auth/logout` revokes the current refresh token
 (`revokedAt`) and clears the cookie. A later "log out everywhere" is a

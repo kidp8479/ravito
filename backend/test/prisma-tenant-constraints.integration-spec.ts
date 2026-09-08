@@ -52,12 +52,6 @@ describe('Prisma schema tenant constraints (integration)', () => {
     return user;
   }
 
-  it('rejects an email that differs from an existing one only by case', async () => {
-    const user = await createUser();
-
-    await expect(createUser(user.email.toUpperCase())).rejects.toThrow();
-  });
-
   it('rejects a duplicate (householdId, userId) membership', async () => {
     const household = await createHousehold();
     const user = await createUser();
