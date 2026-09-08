@@ -82,4 +82,13 @@ export default defineConfig([
       'react-refresh/only-export-components': 'off',
     },
   },
+  {
+    // shadcn/ui convention: a primitive co-exports its `cva` variants
+    // (e.g. `buttonVariants`) alongside the component for callers that
+    // need the class names without the component itself.
+    files: ['src/components/ui/**/*.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ]);
