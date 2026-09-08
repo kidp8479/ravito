@@ -62,35 +62,41 @@ export class HouseholdsService {
       throw new BadRequestException('Invalid or expired invite code');
     }
 
-    // Atomically claim the invite before creating the membership: a plain
-    // read-then-write here would let two concurrent joins with the same
-    // code both pass a `consumedAt === null` check (same reasoning as
-    // AuthService.refresh's rotation, RAV-6).
-    const { count } = await this.prisma.householdInvite.updateMany({
-      where: { id: invite.id, consumedAt: null },
-      data: { consumedAt: new Date() },
-    });
-    if (count === 0) {
-      throw new BadRequestException('Invalid or expired invite code');
-    }
-
-    try {
-      await this.prisma.householdMember.create({
-        data: { householdId: invite.householdId, userId, role: 'MEMBER' },
+    // Same transaction as the membership create below: claiming the
+    // invite (consumedAt) and adding the member have to commit or fail
+    // together, or a transient DB error on the create would permanently
+    // burn the invite without the user ever actually joining.
+    return this.prisma.$transaction(async (tx) => {
+      // Atomically claim the invite before creating the membership: a
+      // plain read-then-write here would let two concurrent joins with
+      // the same code both pass a `consumedAt === null` check (same
+      // reasoning as AuthService.refresh's rotation, RAV-6).
+      const { count } = await tx.householdInvite.updateMany({
+        where: { id: invite.id, consumedAt: null },
+        data: { consumedAt: new Date() },
       });
-    } catch (error) {
-      // Already a member (rejoining with a second invite, or a race with
-      // another invite to the same household) - the invite still did its
-      // job, no need to fail the request over it.
-      const alreadyMember =
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002';
-      if (!alreadyMember) {
-        throw error;
+      if (count === 0) {
+        throw new BadRequestException('Invalid or expired invite code');
       }
-    }
 
-    return { householdId: invite.householdId };
+      try {
+        await tx.householdMember.create({
+          data: { householdId: invite.householdId, userId, role: 'MEMBER' },
+        });
+      } catch (error) {
+        // Already a member (rejoining with a second invite, or a race
+        // with another invite to the same household) - the invite still
+        // did its job, no need to fail the request over it.
+        const alreadyMember =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002';
+        if (!alreadyMember) {
+          throw error;
+        }
+      }
+
+      return { householdId: invite.householdId };
+    });
   }
 
   async listMembers(householdId: string): Promise<HouseholdMemberView[]> {
@@ -114,13 +120,10 @@ export class HouseholdsService {
     callerId: string,
     targetUserId: string,
   ): Promise<void> {
-    if (callerId !== targetUserId) {
-      const callerMembership = await this.prisma.householdMember.findUnique({
-        where: { householdId_userId: { householdId, userId: callerId } },
-      });
-      if (callerMembership?.role !== 'OWNER') {
-        throw new ForbiddenException('Only an OWNER can remove another member');
-      }
+    if (callerId === targetUserId) {
+      await this.assertCanLeave(householdId, callerId);
+    } else {
+      await this.assertCanRemoveSomeoneElse(householdId, callerId);
     }
 
     try {
@@ -135,6 +138,50 @@ export class HouseholdsService {
         throw error;
       }
       throw new NotFoundException('Membership not found');
+    }
+  }
+
+  private async assertCanRemoveSomeoneElse(
+    householdId: string,
+    callerId: string,
+  ): Promise<void> {
+    const callerMembership = await this.prisma.householdMember.findUnique({
+      where: { householdId_userId: { householdId, userId: callerId } },
+    });
+    if (callerMembership?.role !== 'OWNER') {
+      throw new ForbiddenException('Only an OWNER can remove another member');
+    }
+  }
+
+  // Leaving is normally unconditional, but the *last* OWNER leaving while
+  // other members remain would orphan them - no one left able to remove
+  // or manage anyone (there's no ownership transfer yet). A lone OWNER
+  // with no one else in the household can still leave freely; the
+  // household just sits empty. Multiple OWNERs (once promotion exists)
+  // can always leave, since another one remains.
+  private async assertCanLeave(
+    householdId: string,
+    callerId: string,
+  ): Promise<void> {
+    const callerMembership = await this.prisma.householdMember.findUnique({
+      where: { householdId_userId: { householdId, userId: callerId } },
+    });
+    if (callerMembership?.role !== 'OWNER') {
+      return;
+    }
+
+    const [otherMembers, otherOwners] = await Promise.all([
+      this.prisma.householdMember.count({
+        where: { householdId, userId: { not: callerId } },
+      }),
+      this.prisma.householdMember.count({
+        where: { householdId, role: 'OWNER', userId: { not: callerId } },
+      }),
+    ]);
+    if (otherMembers > 0 && otherOwners === 0) {
+      throw new ForbiddenException(
+        'The last OWNER cannot leave while other members remain; remove them first',
+      );
     }
   }
 }

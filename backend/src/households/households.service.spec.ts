@@ -4,8 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  recordNotFoundError,
+  uniqueConstraintError,
+} from '../../test/prisma-errors';
 import { HouseholdsService } from './households.service';
 
 // jest's `expect.any` is typed as returning `any`, which trips
@@ -16,19 +19,6 @@ function matchAny<T>(ctor: new (...args: never[]) => T): T {
   return expect.any(ctor) as T;
 }
 
-function p2002(): Prisma.PrismaClientKnownRequestError {
-  return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-    code: 'P2002',
-    clientVersion: 'test',
-  });
-}
-function p2025(): Prisma.PrismaClientKnownRequestError {
-  return new Prisma.PrismaClientKnownRequestError('Record not found', {
-    code: 'P2025',
-    clientVersion: 'test',
-  });
-}
-
 describe('HouseholdsService', () => {
   let service: HouseholdsService;
   let prisma: {
@@ -37,6 +27,7 @@ describe('HouseholdsService', () => {
       create: jest.Mock;
       findUnique: jest.Mock;
       findMany: jest.Mock;
+      count: jest.Mock;
       delete: jest.Mock;
     };
     householdInvite: {
@@ -44,6 +35,7 @@ describe('HouseholdsService', () => {
       findUnique: jest.Mock;
       updateMany: jest.Mock;
     };
+    $transaction: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -53,6 +45,7 @@ describe('HouseholdsService', () => {
         create: jest.fn(),
         findUnique: jest.fn(),
         findMany: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
         delete: jest.fn(),
       },
       householdInvite: {
@@ -60,6 +53,11 @@ describe('HouseholdsService', () => {
         findUnique: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      // No real transactional semantics needed here: the callback just
+      // runs against the same mocked prisma, same as fake-prisma.ts.
+      $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
+        callback(prisma),
+      ),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -144,22 +142,67 @@ describe('HouseholdsService', () => {
 
     it('treats already being a member as success, not an error', async () => {
       prisma.householdInvite.findUnique.mockResolvedValue(invite);
-      prisma.householdMember.create.mockRejectedValue(p2002());
+      prisma.householdMember.create.mockRejectedValue(uniqueConstraintError());
 
       const result = await service.joinByCode('user-2', 'abc123');
 
       expect(result).toEqual({ householdId: 'h1' });
     });
+
+    it('runs the claim and the membership create in the same transaction', async () => {
+      prisma.householdInvite.findUnique.mockResolvedValue(invite);
+
+      await service.joinByCode('user-2', 'abc123');
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('removeMember', () => {
-    it('allows a member to remove themself without checking their role', async () => {
+    it('allows a MEMBER to remove themself', async () => {
+      prisma.householdMember.findUnique.mockResolvedValue({ role: 'MEMBER' });
+
       await service.removeMember('h1', 'user-1', 'user-1');
 
-      expect(prisma.householdMember.findUnique).not.toHaveBeenCalled();
       expect(prisma.householdMember.delete).toHaveBeenCalledWith({
         where: { householdId_userId: { householdId: 'h1', userId: 'user-1' } },
       });
+    });
+
+    it('allows the sole OWNER to leave when no other members remain', async () => {
+      prisma.householdMember.findUnique.mockResolvedValue({ role: 'OWNER' });
+      prisma.householdMember.count.mockResolvedValue(0); // no other members
+
+      await service.removeMember('h1', 'owner-1', 'owner-1');
+
+      expect(prisma.householdMember.delete).toHaveBeenCalled();
+    });
+
+    it('rejects the last OWNER leaving while other members remain', async () => {
+      prisma.householdMember.findUnique.mockResolvedValue({ role: 'OWNER' });
+      prisma.householdMember.count.mockImplementation(
+        ({ where }: { where: { role?: string } }) =>
+          // 1 other member; 0 other OWNERs.
+          Promise.resolve(where.role === 'OWNER' ? 0 : 1),
+      );
+
+      await expect(
+        service.removeMember('h1', 'owner-1', 'owner-1'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.householdMember.delete).not.toHaveBeenCalled();
+    });
+
+    it('allows one of several OWNERs to leave while other members remain', async () => {
+      prisma.householdMember.findUnique.mockResolvedValue({ role: 'OWNER' });
+      prisma.householdMember.count.mockImplementation(
+        ({ where }: { where: { role?: string } }) =>
+          // 1 other member, and it's another OWNER.
+          Promise.resolve(where.role === 'OWNER' ? 1 : 1),
+      );
+
+      await service.removeMember('h1', 'owner-1', 'owner-1');
+
+      expect(prisma.householdMember.delete).toHaveBeenCalled();
     });
 
     it('allows an OWNER to remove another member', async () => {
@@ -183,7 +226,7 @@ describe('HouseholdsService', () => {
 
     it('404s when the target is not actually a member', async () => {
       prisma.householdMember.findUnique.mockResolvedValue({ role: 'OWNER' });
-      prisma.householdMember.delete.mockRejectedValue(p2025());
+      prisma.householdMember.delete.mockRejectedValue(recordNotFoundError());
 
       await expect(
         service.removeMember('h1', 'owner-1', 'user-2'),

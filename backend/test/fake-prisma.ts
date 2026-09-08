@@ -5,7 +5,7 @@
 // in every e2e spec" convention (see docs/known-limitations.md >
 // "test:integration is a third Jest tier").
 
-import { Prisma } from '@prisma/client';
+import { recordNotFoundError, uniqueConstraintError } from './prisma-errors';
 
 interface FakeUser {
   id: string;
@@ -50,20 +50,6 @@ function memberKey(householdId: string, userId: string): string {
   return `${householdId}:${userId}`;
 }
 
-function uniqueConstraintError(): Prisma.PrismaClientKnownRequestError {
-  return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-    code: 'P2002',
-    clientVersion: 'test',
-  });
-}
-
-function recordNotFoundError(): Prisma.PrismaClientKnownRequestError {
-  return new Prisma.PrismaClientKnownRequestError('Record not found', {
-    code: 'P2025',
-    clientVersion: 'test',
-  });
-}
-
 export function createFakePrisma() {
   let nextId = 1;
   const usersById = new Map<string, FakeUser>();
@@ -75,7 +61,7 @@ export function createFakePrisma() {
   const invitesById = new Map<string, FakeHouseholdInvite>();
   const invitesByCode = new Map<string, FakeHouseholdInvite>();
 
-  return {
+  const client = {
     user: {
       findUnique: jest.fn(
         ({ where }: { where: { id?: string; email?: string } }) => {
@@ -249,6 +235,26 @@ export function createFakePrisma() {
           })),
         );
       }),
+      count: jest.fn(
+        ({
+          where,
+        }: {
+          where: {
+            householdId: string;
+            role?: 'OWNER' | 'MEMBER';
+            userId?: { not: string };
+          };
+        }) => {
+          const count = [...membersByKey.values()].filter(
+            (member) =>
+              member.householdId === where.householdId &&
+              (where.role === undefined || member.role === where.role) &&
+              (where.userId === undefined ||
+                member.userId !== where.userId.not),
+          ).length;
+          return Promise.resolve(count);
+        },
+      ),
       delete: jest.fn(
         ({
           where,
@@ -316,5 +322,16 @@ export function createFakePrisma() {
         },
       ),
     },
+  };
+
+  return {
+    ...client,
+    // No real transactional semantics (no rollback) - good enough for
+    // what the e2e specs exercise (the successful path and the
+    // "already a member" branch); real atomicity is Postgres's job,
+    // proven by the integration tier instead.
+    $transaction: jest.fn(<T>(callback: (tx: typeof client) => Promise<T>) =>
+      callback(client),
+    ),
   };
 }

@@ -235,5 +235,29 @@ describe('Households (e2e)', () => {
         .set(...auth(owner.accessToken))
         .expect(204);
     });
+
+    it('rejects the last OWNER leaving while another member remains', async () => {
+      const { owner, household } = await setupHouseholdWithTwoMembers();
+
+      await request(server)
+        .delete(`/households/${household.id}/members/${owner.userId}`)
+        .set(...auth(owner.accessToken))
+        .expect(403);
+    });
+
+    it('lets a sole OWNER leave when nobody else is in the household', async () => {
+      const owner = await registerUser('sole-owner4@example.com');
+      const createRes = await request(server)
+        .post('/households')
+        .set(...auth(owner.accessToken))
+        .send({ name: 'Casa Sola' })
+        .expect(201);
+      const household = createRes.body as HouseholdBody;
+
+      await request(server)
+        .delete(`/households/${household.id}/members/${owner.userId}`)
+        .set(...auth(owner.accessToken))
+        .expect(204);
+    });
   });
 });

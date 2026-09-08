@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -24,7 +25,16 @@ export class HouseholdMembershipGuard implements CanActivate {
       throw new BadRequestException('Missing household id');
     }
 
-    const { sub: userId } = req.user as JwtPayload;
+    // Defensive, not redundant: this guard is meant to be reused by every
+    // future domain module (common.module.ts), and unlike a check within
+    // one file's own control flow, "always paired with JwtAuthGuard" is a
+    // convention a future module could get wrong. Failing that as a 401
+    // is a lot better than the uncaught TypeError an unchecked cast would
+    // throw instead.
+    const userId = (req.user as JwtPayload | undefined)?.sub;
+    if (!userId) {
+      throw new UnauthorizedException('Missing authenticated user');
+    }
 
     const membership = await this.prisma.householdMember.findUnique({
       where: { householdId_userId: { householdId, userId } },
