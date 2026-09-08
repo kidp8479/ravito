@@ -5,6 +5,26 @@ instead of forgotten ones. Unlike `docs/lessons.md` (mistakes already fixed),
 these are live: check here before "fixing" one by surprise, and update or
 remove the entry once it's actually resolved.
 
+## The refresh cookie's `Secure` flag has no non-HTTPS escape hatch
+
+`AuthController`'s `setRefreshCookie` (`backend/src/auth/auth.controller.ts`)
+hardcodes `secure: true` unconditionally, per ADR 0002. `localhost` is a
+browser-recognized secure context, so local dev over plain HTTP works, but
+any other non-HTTPS host (a staging deploy before TLS is wired up, reaching
+the dev backend by its LAN IP or hostname instead of literal `localhost`)
+would never receive the cookie at all: browsers refuse to store a `Secure`
+cookie outside HTTPS or the localhost/loopback exception.
+
+**Why not fixed**: making it environment-conditional (`secure: NODE_ENV ===
+'production'`) would quietly reopen the XSS-cookie-theft mitigation ADR
+0002 chose `Secure` for, on nothing more than a `NODE_ENV` value being
+right - too easy to get wrong for what it buys. No deployment target hits
+this yet (compose dev is `localhost`; there is no staging environment).
+
+**Resolves when**: a real non-`localhost`, non-HTTPS deployment target
+shows up (staging without TLS, LAN testing) - decide deliberately then
+whether that target gets TLS instead, rather than loosening this cookie.
+
 ## Postgres image/credentials are duplicated between `docker-compose.yml` and CI
 
 `.github/workflows/ci.yml`'s `postgres` service (image `postgres:16-alpine`,
