@@ -5,32 +5,6 @@ instead of forgotten ones. Unlike `docs/lessons.md` (mistakes already fixed),
 these are live: check here before "fixing" one by surprise, and update or
 remove the entry once it's actually resolved.
 
-## Email uniqueness is case-insensitive via a hand-written index, not the schema
-
-`backend/prisma/schema.prisma`'s `User.email` is a plain case-sensitive
-`@unique`. Case-insensitive uniqueness (`Alice@x.com` and `alice@x.com` can't
-both exist) is enforced by a second, hand-written index
-(`CREATE UNIQUE INDEX "User_email_lower_key" ON "User" (lower(email))`) added
-directly in the `add_case_insensitive_email_index` migration.
-
-**Why not fixed properly**: the clean fix is a Postgres `citext` column, but
-that needs Prisma's `postgresqlExtensions` preview feature, still preview
-years after introduction - too much risk for how little it buys here.
-Normalizing email to lowercase at the write boundary would avoid needing a
-DB-level guard at all, but there's no write boundary yet (RAV-6, auth
-endpoints, isn't built).
-
-**Consequence to watch for**: the index has no `schema.prisma` counterpart,
-so `prisma migrate diff` / `migrate dev` can't see it and may one day
-generate a migration that drops "User_email_lower_key" as an "unrecognized"
-object. There's a warning comment on `User.email` and in the migration file,
-but no automated check backs it up.
-
-**Resolves when**: RAV-6 (auth endpoints) either normalizes email to
-lowercase on write (making the raw index redundant, safe to drop), or
-`postgresqlExtensions` graduates out of preview and a `citext` migration
-replaces it.
-
 ## Postgres image/credentials are duplicated between `docker-compose.yml` and CI
 
 `.github/workflows/ci.yml`'s `postgres` service (image `postgres:16-alpine`,
