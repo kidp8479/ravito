@@ -5,6 +5,24 @@ instead of forgotten ones. Unlike `docs/lessons.md` (mistakes already fixed),
 these are live: check here before "fixing" one by surprise, and update or
 remove the entry once it's actually resolved.
 
+## The household screen only shows the caller's first household
+
+`HouseholdPage` (`frontend/src/routes/household.tsx`, RAV-8) renders only
+`households.data[0]` from `GET /households/mine`, which is ordered
+oldest-joined-first. Nothing on the backend prevents a user from
+belonging to more than one household (`joinByCode` has no such check), so
+a user who joins a second one would see no indicator it exists and have
+no way to view or leave it from the UI.
+
+**Why not fixed**: v1's scope is a single shared household per user
+(`PLAN.md` > "Perimetre v1 = socle uniquement"); building a
+household-switcher UI for a case the product doesn't intend to support
+yet would be speculative. `GET /households/mine` already returns the
+full list, so no backend change is needed when this gets built.
+
+**Resolves when**: the product actually wants multi-household support -
+add a switcher to `HouseholdPage` reading the rest of the array.
+
 ## Household invite codes are stored in cleartext, not hashed
 
 `HouseholdInvite.code` (`backend/prisma/schema.prisma`, added in RAV-4) is a
