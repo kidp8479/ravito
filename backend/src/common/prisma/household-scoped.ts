@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -18,6 +19,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 // household genuinely doesn't match and comes back as not-found (P2025),
 // the same as a nonexistent id. Verified against real Postgres in
 // test/household-scoped.integration-spec.ts.
+//
+// update()'s `data` deliberately excludes `id` and `householdId`: Prisma's
+// *Unchecked*UpdateInput types (needed here to set FK scalars like
+// productId directly) list both as ordinary settable fields, so leaving
+// them in would let a caller silently move a row to another household by
+// passing `{ householdId: otherHouseholdId }` in `data` - the `where`
+// clause still finds the caller's own row, but the write itself would
+// re-point it.
 
 export function householdScopedProducts(
   prisma: PrismaService,
@@ -40,7 +49,10 @@ export function householdScopedProducts(
     create(data: Omit<Prisma.ProductUncheckedCreateInput, 'householdId'>) {
       return prisma.product.create({ data: { ...data, householdId } });
     },
-    update(id: string, data: Prisma.ProductUncheckedUpdateInput) {
+    update(
+      id: string,
+      data: Omit<Prisma.ProductUncheckedUpdateInput, 'id' | 'householdId'>,
+    ) {
       return prisma.product.update({ where: { id, householdId }, data });
     },
     delete(id: string) {
@@ -53,6 +65,21 @@ export function householdScopedInventoryItems(
   prisma: PrismaService,
   householdId: string,
 ) {
+  // InventoryItem.productId is a foreign key into Product, but the FK
+  // constraint alone only guarantees the referenced product exists
+  // *somewhere* - not that it belongs to this household. Without this
+  // check, create() would let household A create an InventoryItem that
+  // points at household B's product: an invisible cross-tenant reference
+  // this module exists specifically to prevent.
+  async function assertProductInHousehold(productId: string): Promise<void> {
+    const product = await prisma.product.findUnique({
+      where: { id: productId, householdId },
+    });
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+  }
+
   return {
     findMany(
       args: Omit<Prisma.InventoryItemFindManyArgs, 'where'> & {
@@ -67,12 +94,23 @@ export function householdScopedInventoryItems(
     findUnique(id: string) {
       return prisma.inventoryItem.findUnique({ where: { id, householdId } });
     },
-    create(
+    async create(
       data: Omit<Prisma.InventoryItemUncheckedCreateInput, 'householdId'>,
     ) {
+      await assertProductInHousehold(data.productId);
       return prisma.inventoryItem.create({ data: { ...data, householdId } });
     },
-    update(id: string, data: Prisma.InventoryItemUncheckedUpdateInput) {
+    // productId is excluded here, not just householdId/id: an inventory
+    // row's identity (which product, in which household) isn't meant to
+    // change after creation - only quantity/unit are. That sidesteps
+    // needing the same cross-household productId check on every update.
+    update(
+      id: string,
+      data: Omit<
+        Prisma.InventoryItemUncheckedUpdateInput,
+        'id' | 'householdId' | 'productId'
+      >,
+    ) {
       return prisma.inventoryItem.update({
         where: { id, householdId },
         data,

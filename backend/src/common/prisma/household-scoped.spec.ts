@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import {
   householdScopedInventoryItems,
   householdScopedProducts,
@@ -92,17 +93,36 @@ describe('householdScopedInventoryItems', () => {
     });
   });
 
-  it('injects householdId on create', () => {
+  it('injects householdId on create, after confirming the product is in this household', async () => {
     const mocks = fakePrisma();
-    void householdScopedInventoryItems(asPrisma(mocks), 'h1').create({
+    mocks.product.findUnique.mockResolvedValue({ id: 'p1', householdId: 'h1' });
+
+    await householdScopedInventoryItems(asPrisma(mocks), 'h1').create({
       productId: 'p1',
       quantity: 2,
       unit: 'L',
     });
 
+    expect(mocks.product.findUnique).toHaveBeenCalledWith({
+      where: { id: 'p1', householdId: 'h1' },
+    });
     expect(mocks.inventoryItem.create).toHaveBeenCalledWith({
       data: { productId: 'p1', quantity: 2, unit: 'L', householdId: 'h1' },
     });
+  });
+
+  it("rejects create when the product isn't in this household", async () => {
+    const mocks = fakePrisma();
+    mocks.product.findUnique.mockResolvedValue(null);
+
+    await expect(
+      householdScopedInventoryItems(asPrisma(mocks), 'h1').create({
+        productId: 'other-households-product',
+        quantity: 2,
+        unit: 'L',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(mocks.inventoryItem.create).not.toHaveBeenCalled();
   });
 
   it('scopes update and delete by id and householdId', () => {
