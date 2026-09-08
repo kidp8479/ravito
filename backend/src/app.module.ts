@@ -5,8 +5,10 @@ import helmet from 'helmet';
 import { LoggerModule } from 'nestjs-pino';
 import { envValidationSchema } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
+import { CommonModule } from './common/common.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
+import { HouseholdsModule } from './households/households.module';
 
 @Module({
   imports: [
@@ -42,8 +44,10 @@ import { AuthModule } from './auth/auth.module';
       }),
     }),
     PrismaModule,
+    CommonModule,
     HealthModule,
     AuthModule,
+    HouseholdsModule,
   ],
 })
 export class AppModule implements NestModule {
