@@ -41,8 +41,10 @@ model Household {
   name      String
   createdAt DateTime @default(now())
 
-  members HouseholdMember[]
-  invites HouseholdInvite[]
+  members        HouseholdMember[]
+  invites        HouseholdInvite[]
+  products       Product[]
+  inventoryItems InventoryItem[]
 }
 
 model HouseholdMember {
@@ -90,6 +92,58 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// Grocery-aisle grouping for the inventory screen (RAV-12). Nullable on
+// Product: a quick-added item doesn't have to be categorized up front.
+enum ProductCategory {
+  FRUITS_AND_VEGETABLES
+  DAIRY
+  MEAT_AND_FISH
+  BAKERY
+  PANTRY
+  FROZEN
+  BEVERAGES
+  HOUSEHOLD_AND_HYGIENE
+  OTHER
+}
+
+// The canonical catalogue entry for a product *within one household* - not
+// shared across households, so the same "Lait" in two different homes are
+// two different rows (future PurchaseHistory / receipt-import anchor).
+model Product {
+  id          String           @id @default(cuid())
+  householdId String
+  name        String
+  category    ProductCategory?
+  defaultUnit String?
+  createdAt   DateTime         @default(now())
+
+  household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  inventoryItems InventoryItem[]
+
+  @@unique([householdId, name])
+}
+
+// Current pantry stock for one product in one household. One row per
+// (household, product): quantity is a running total, not a log of
+// individual additions/removals.
+model InventoryItem {
+  id          String   @id @default(cuid())
+  householdId String
+  productId   String
+  quantity    Float
+  unit        String
+  updatedAt   DateTime @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, productId])
+  // productId isn't the leading column of the unique index above, so a
+  // lookup or cascade delete keyed on it alone wouldn't use it (same
+  // reasoning as HouseholdMember.userId, RAV-7).
+  @@index([productId])
 }
 
 model AuditLog {
