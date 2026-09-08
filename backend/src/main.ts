@@ -1,4 +1,3 @@
-import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from 'nestjs-pino';
@@ -13,14 +12,6 @@ async function bootstrap() {
   // Close DB connections and run module teardown on SIGTERM/SIGINT (what
   // `docker stop` sends) instead of dropping them.
   app.enableShutdownHooks();
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // strips fields not declared in the DTO
-      forbidNonWhitelisted: true, // ...and returns 400 if any are sent
-      transform: true, // turns the JSON payload into a DTO class instance
-    }),
-  );
 
   app.enableCors({
     // getOrThrow, not get: Joi guarantees both vars are set (with
