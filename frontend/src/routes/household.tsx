@@ -51,6 +51,9 @@ function HouseholdPage() {
             <Button asChild variant="ghost">
               <Link to="/shopping-list">Shopping list</Link>
             </Button>
+            <Button asChild variant="ghost">
+              <Link to="/purchase-history">Purchase history</Link>
+            </Button>
           </>
         )}
       </AppHeader>

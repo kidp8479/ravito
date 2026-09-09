@@ -53,6 +53,9 @@ function ShoppingListPage() {
         <Button asChild variant="ghost">
           <Link to="/inventory">Inventory</Link>
         </Button>
+        <Button asChild variant="ghost">
+          <Link to="/purchase-history">Purchase history</Link>
+        </Button>
       </AppHeader>
 
       {household.isLoading && (

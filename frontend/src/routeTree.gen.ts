@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as HouseholdRouteImport } from './routes/household'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as PurchaseHistoryRouteImport } from './routes/purchase-history'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ShoppingListRouteImport } from './routes/shopping-list'
 
@@ -36,6 +37,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PurchaseHistoryRoute = PurchaseHistoryRouteImport.update({
+  id: '/purchase-history',
+  path: '/purchase-history',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/household': typeof HouseholdRoute
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
+  '/purchase-history': typeof PurchaseHistoryRoute
   '/register': typeof RegisterRoute
   '/shopping-list': typeof ShoppingListRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/household': typeof HouseholdRoute
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
+  '/purchase-history': typeof PurchaseHistoryRoute
   '/register': typeof RegisterRoute
   '/shopping-list': typeof ShoppingListRoute
 }
@@ -69,6 +77,7 @@ export interface FileRoutesById {
   '/household': typeof HouseholdRoute
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
+  '/purchase-history': typeof PurchaseHistoryRoute
   '/register': typeof RegisterRoute
   '/shopping-list': typeof ShoppingListRoute
 }
@@ -79,6 +88,7 @@ export interface FileRouteTypes {
     | '/household'
     | '/inventory'
     | '/login'
+    | '/purchase-history'
     | '/register'
     | '/shopping-list'
   fileRoutesByTo: FileRoutesByTo
@@ -87,6 +97,7 @@ export interface FileRouteTypes {
     | '/household'
     | '/inventory'
     | '/login'
+    | '/purchase-history'
     | '/register'
     | '/shopping-list'
   id:
@@ -95,6 +106,7 @@ export interface FileRouteTypes {
     | '/household'
     | '/inventory'
     | '/login'
+    | '/purchase-history'
     | '/register'
     | '/shopping-list'
   fileRoutesById: FileRoutesById
@@ -104,6 +116,7 @@ export interface RootRouteChildren {
   HouseholdRoute: typeof HouseholdRoute
   InventoryRoute: typeof InventoryRoute
   LoginRoute: typeof LoginRoute
+  PurchaseHistoryRoute: typeof PurchaseHistoryRoute
   RegisterRoute: typeof RegisterRoute
   ShoppingListRoute: typeof ShoppingListRoute
 }
@@ -138,6 +151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/purchase-history': {
+      id: '/purchase-history'
+      path: '/purchase-history'
+      fullPath: '/purchase-history'
+      preLoaderRoute: typeof PurchaseHistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/register': {
       id: '/register'
       path: '/register'
@@ -160,6 +180,7 @@ const rootRouteChildren: RootRouteChildren = {
   HouseholdRoute: HouseholdRoute,
   InventoryRoute: InventoryRoute,
   LoginRoute: LoginRoute,
+  PurchaseHistoryRoute: PurchaseHistoryRoute,
   RegisterRoute: RegisterRoute,
   ShoppingListRoute: ShoppingListRoute,
 }
