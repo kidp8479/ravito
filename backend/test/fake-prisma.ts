@@ -107,6 +107,28 @@ function matchesWhere<T extends object>(row: T, where: Partial<T>): boolean {
   );
 }
 
+// Mirrors Prisma's `groupBy({ by: ['productId'], _count: { productId: true } })`
+// shape - used by both ShoppingListItem and PurchaseHistory for
+// ProductsService.search's add-frequency ranking (RAV-18).
+function groupByProductId(
+  rows: { householdId: string; productId: string | null }[],
+  where: { householdId: string; productId?: { in: string[] } },
+): { productId: string; _count: { productId: number } }[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.householdId !== where.householdId) continue;
+    if (!row.productId) continue;
+    if (where.productId && !where.productId.in.includes(row.productId)) {
+      continue;
+    }
+    counts.set(row.productId, (counts.get(row.productId) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([productId, count]) => ({
+    productId,
+    _count: { productId: count },
+  }));
+}
+
 export function createFakePrisma() {
   let nextId = 1;
   const usersById = new Map<string, FakeUser>();
@@ -717,6 +739,16 @@ export function createFakePrisma() {
           return Promise.resolve(item);
         },
       ),
+      groupBy: jest.fn(
+        ({
+          where,
+        }: {
+          where: { householdId: string; productId?: { in: string[] } };
+        }) =>
+          Promise.resolve(
+            groupByProductId([...shoppingListItemsById.values()], where),
+          ),
+      ),
     },
     purchaseHistory: {
       findMany: jest.fn(
@@ -773,6 +805,16 @@ export function createFakePrisma() {
           purchaseHistoryById.set(entry.id, entry);
           return Promise.resolve(entry);
         },
+      ),
+      groupBy: jest.fn(
+        ({
+          where,
+        }: {
+          where: { householdId: string; productId?: { in: string[] } };
+        }) =>
+          Promise.resolve(
+            groupByProductId([...purchaseHistoryById.values()], where),
+          ),
       ),
     },
   };
