@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { FormError, FormField } from '@/components/form';
+import { ProductSuggestions } from '@/components/product-suggestions';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -131,31 +132,6 @@ function FastAddCard({ householdId }: { householdId: string }) {
         </form>
       </CardContent>
     </Card>
-  );
-}
-
-function ProductSuggestions({
-  suggestions,
-  onSelect,
-}: {
-  suggestions: Product[];
-  onSelect: (product: Product) => void;
-}) {
-  if (suggestions.length === 0) return null;
-  return (
-    <ul className="border-input mt-1 flex flex-col rounded-md border text-sm">
-      {suggestions.map((product) => (
-        <li key={product.id}>
-          <button
-            type="button"
-            className="hover:bg-accent w-full px-3 py-2 text-left"
-            onClick={() => onSelect(product)}
-          >
-            {product.name}
-          </button>
-        </li>
-      ))}
-    </ul>
   );
 }
 
