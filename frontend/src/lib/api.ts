@@ -5,7 +5,9 @@ import {
   setAccessToken,
 } from './auth-store';
 
-const API_URL =
+// Exported: the shopping-list realtime socket (RAV-14) connects to the
+// same backend host, not the frontend's own origin.
+export const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   'http://localhost:3000';
 
