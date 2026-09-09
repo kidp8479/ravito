@@ -31,9 +31,11 @@ model User {
   displayName  String
   createdAt    DateTime @default(now())
 
-  memberships    HouseholdMember[]
-  createdInvites HouseholdInvite[]
-  refreshTokens  RefreshToken[]
+  memberships      HouseholdMember[]
+  createdInvites   HouseholdInvite[]
+  refreshTokens    RefreshToken[]
+  addedListItems   ShoppingListItem[] @relation("ShoppingListItemAddedBy")
+  checkedListItems ShoppingListItem[] @relation("ShoppingListItemCheckedBy")
 }
 
 model Household {
@@ -41,10 +43,11 @@ model Household {
   name      String
   createdAt DateTime @default(now())
 
-  members        HouseholdMember[]
-  invites        HouseholdInvite[]
-  products       Product[]
-  inventoryItems InventoryItem[]
+  members           HouseholdMember[]
+  invites           HouseholdInvite[]
+  products          Product[]
+  inventoryItems    InventoryItem[]
+  shoppingListItems ShoppingListItem[]
 }
 
 model HouseholdMember {
@@ -76,18 +79,18 @@ model HouseholdInvite {
 }
 
 model RefreshToken {
-  id        String    @id @default(cuid())
-  userId    String
+  id                String    @id @default(cuid())
+  userId            String
   // The token itself is never stored, only its hash, same reasoning as
   // passwords (ADR 0002). A high-entropy random token doesn't need a slow
   // KDF like argon2id, so this is sha256, not argon2.
-  tokenHash String    @unique
-  expiresAt DateTime
-  revokedAt DateTime?
+  tokenHash         String    @unique
+  expiresAt         DateTime
+  revokedAt         DateTime?
   // Points at the token that replaced this one, for reuse-detection chains:
   // a refresh request presenting an already-revoked token revokes the rest
   // of the chain (ADR 0002).
-  replacedByTokenId String? @unique
+  replacedByTokenId String?   @unique
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -119,8 +122,9 @@ model Product {
   defaultUnit String?
   createdAt   DateTime         @default(now())
 
-  household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  inventoryItems InventoryItem[]
+  household         Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  inventoryItems    InventoryItem[]
+  shoppingListItems ShoppingListItem[]
 
   @@unique([householdId, name])
 }
@@ -144,6 +148,45 @@ model InventoryItem {
   // lookup or cascade delete keyed on it alone wouldn't use it (same
   // reasoning as HouseholdMember.userId, RAV-7).
   @@index([productId])
+}
+
+// One row per shopping-list entry. productId is nullable: an item can be
+// free text not tied to the household's catalogue ("2 baguettes" typed
+// straight in), or linked to a Product for the "add from catalogue" path.
+// rawLabel is always set (even when productId is set) so the list still
+// displays correctly if the linked product is later renamed or deleted.
+model ShoppingListItem {
+  id          String   @id @default(cuid())
+  householdId String
+  productId   String?
+  rawLabel    String
+  quantity    Float
+  unit        String
+  checked     Boolean  @default(false)
+  // Both nullable with onDelete: SetNull, not Cascade: a shopping list is
+  // shared household state that should outlive any one member's account
+  // (no account-deletion feature exists yet, but getting this FK behavior
+  // right now avoids a painful migration later, PLAN.md's SaaS-ready
+  // discipline) - unlike HouseholdInvite.createdById (RAV-4), which
+  // cascades because an invite is that user's own artifact, not shared
+  // data other members depend on.
+  checkedById String?
+  addedById   String?
+  // Manual ordering for the shopping-list screen's reorder action
+  // (PLAN.md); no uniqueness constraint - ties are fine, the frontend
+  // just needs *an* order, not a dense/gapless one.
+  position    Int
+  createdAt   DateTime @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  checkedBy User?     @relation("ShoppingListItemCheckedBy", fields: [checkedById], references: [id], onDelete: SetNull)
+  addedBy   User?     @relation("ShoppingListItemAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+
+  @@index([householdId])
+  @@index([productId])
+  @@index([checkedById])
+  @@index([addedById])
 }
 
 model AuditLog {
