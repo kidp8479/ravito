@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { foreignKeyError, recordNotFoundError } from '../../test/prisma-errors';
+import { ShoppingListGateway } from './shopping-list.gateway';
 import { ShoppingListService } from './shopping-list.service';
 
 describe('ShoppingListService', () => {
@@ -17,6 +18,11 @@ describe('ShoppingListService', () => {
       delete: jest.Mock;
     };
   };
+  let gateway: {
+    emitCreated: jest.Mock;
+    emitUpdated: jest.Mock;
+    emitDeleted: jest.Mock;
+  };
 
   beforeEach(async () => {
     prisma = {
@@ -30,11 +36,17 @@ describe('ShoppingListService', () => {
         delete: jest.fn(),
       },
     };
+    gateway = {
+      emitCreated: jest.fn(),
+      emitUpdated: jest.fn(),
+      emitDeleted: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ShoppingListService,
         { provide: PrismaService, useValue: prisma },
+        { provide: ShoppingListGateway, useValue: gateway },
       ],
     }).compile();
 
@@ -42,7 +54,7 @@ describe('ShoppingListService', () => {
   });
 
   describe('create', () => {
-    it('appends at the current item count as position', async () => {
+    it('appends at the current item count as position, then emits item.created', async () => {
       prisma.shoppingListItem.count.mockResolvedValue(2);
       prisma.shoppingListItem.create.mockResolvedValue({ id: 'i1' });
 
@@ -62,9 +74,10 @@ describe('ShoppingListService', () => {
           householdId: 'h1',
         },
       });
+      expect(gateway.emitCreated).toHaveBeenCalledWith('h1', { id: 'i1' });
     });
 
-    it('maps the linked product vanishing mid-request (FK violation) to 404', async () => {
+    it('maps the linked product vanishing mid-request (FK violation) to 404, without emitting', async () => {
       prisma.shoppingListItem.count.mockResolvedValue(0);
       prisma.shoppingListItem.create.mockRejectedValue(foreignKeyError());
 
@@ -76,6 +89,7 @@ describe('ShoppingListService', () => {
           unit: 'L',
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
+      expect(gateway.emitCreated).not.toHaveBeenCalled();
     });
   });
 
@@ -93,24 +107,46 @@ describe('ShoppingListService', () => {
   });
 
   describe('update', () => {
-    it('maps a missing item to 404', async () => {
+    it('emits item.updated with the updated item', async () => {
+      prisma.shoppingListItem.update.mockResolvedValue({
+        id: 'i1',
+        quantity: 3,
+      });
+
+      await service.update('h1', 'i1', { quantity: 3 });
+
+      expect(gateway.emitUpdated).toHaveBeenCalledWith('h1', {
+        id: 'i1',
+        quantity: 3,
+      });
+    });
+
+    it('maps a missing item to 404, without emitting', async () => {
       prisma.shoppingListItem.update.mockRejectedValue(recordNotFoundError());
 
       await expect(
         service.update('h1', 'i1', { quantity: 3 }),
       ).rejects.toBeInstanceOf(NotFoundException);
+      expect(gateway.emitUpdated).not.toHaveBeenCalled();
     });
   });
 
   describe('setChecked', () => {
-    it('sets checkedById to the caller when checking', async () => {
-      prisma.shoppingListItem.update.mockResolvedValue({ id: 'i1' });
+    it('sets checkedById to the caller when checking, then emits item.updated', async () => {
+      prisma.shoppingListItem.update.mockResolvedValue({
+        id: 'i1',
+        checked: true,
+      });
 
       await service.setChecked('h1', 'i1', 'u1', true);
 
       expect(prisma.shoppingListItem.update).toHaveBeenCalledWith({
         where: { id: 'i1', householdId: 'h1' },
         data: { checked: true, checkedById: 'u1' },
+      });
+      expect(gateway.emitUpdated).toHaveBeenCalledWith('h1', {
+        id: 'i1',
+        checked: true,
       });
     });
 
@@ -135,12 +171,21 @@ describe('ShoppingListService', () => {
   });
 
   describe('remove', () => {
-    it('maps a missing item to 404', async () => {
+    it('deletes then emits item.deleted with the id', async () => {
+      prisma.shoppingListItem.delete.mockResolvedValue({ id: 'i1' });
+
+      await service.remove('h1', 'i1');
+
+      expect(gateway.emitDeleted).toHaveBeenCalledWith('h1', 'i1');
+    });
+
+    it('maps a missing item to 404, without emitting', async () => {
       prisma.shoppingListItem.delete.mockRejectedValue(recordNotFoundError());
 
       await expect(service.remove('h1', 'i1')).rejects.toBeInstanceOf(
         NotFoundException,
       );
+      expect(gateway.emitDeleted).not.toHaveBeenCalled();
     });
   });
 });

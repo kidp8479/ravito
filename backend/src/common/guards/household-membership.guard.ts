@@ -9,6 +9,7 @@ import {
 import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtPayload } from '../../auth/strategies/jwt.strategy';
+import { isHouseholdMember } from '../household-membership';
 
 // The non-negotiable tenant boundary (CLAUDE.md): every mutating and
 // read route on a household resource runs this after JwtAuthGuard (which
@@ -36,13 +37,9 @@ export class HouseholdMembershipGuard implements CanActivate {
       throw new UnauthorizedException('Missing authenticated user');
     }
 
-    const membership = await this.prisma.householdMember.findUnique({
-      where: { householdId_userId: { householdId, userId } },
-    });
-
     // 403, not 404: whether the household exists at all is not this
     // guard's business to reveal to someone who isn't a member of it.
-    if (!membership) {
+    if (!(await isHouseholdMember(this.prisma, householdId, userId))) {
       throw new ForbiddenException('Not a member of this household');
     }
 
