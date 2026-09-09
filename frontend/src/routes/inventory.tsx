@@ -76,6 +76,11 @@ function InventoryPage() {
       {household.isLoading && (
         <p className="text-muted-foreground text-sm">Loading...</p>
       )}
+      {household.isError && (
+        <p className="text-destructive text-sm">
+          Could not load your household. Please reload the page.
+        </p>
+      )}
       {household.isSuccess && !household.data && (
         <p className="text-muted-foreground text-sm">
           You do not have a household yet.{' '}
@@ -99,6 +104,11 @@ function InventoryContent({ householdId }: { householdId: string }) {
       <FastAddCard householdId={householdId} />
       {items.isLoading && (
         <p className="text-muted-foreground text-sm">Loading inventory...</p>
+      )}
+      {items.isError && (
+        <p className="text-destructive text-sm">
+          Could not load the inventory. Please reload the page.
+        </p>
       )}
       {items.isSuccess && items.data.length === 0 && (
         <p className="text-muted-foreground text-sm">

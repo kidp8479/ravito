@@ -55,6 +55,11 @@ function HouseholdPage() {
           Loading your household...
         </p>
       )}
+      {household.isError && (
+        <p className="text-destructive text-sm">
+          Could not load your household. Please reload the page.
+        </p>
+      )}
       {household.isSuccess && !household.data && (
         <div className="flex flex-col gap-6">
           <CreateHouseholdCard />
