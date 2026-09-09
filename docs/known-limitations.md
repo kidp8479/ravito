@@ -169,3 +169,30 @@ range.
 **Resolves when**: RAV-23 ships a single grouped bump of the whole
 `@nestjs/*` stack (+ `@nestjs/config`, `nestjs-pino`), and separately, a
 `typescript-eslint` release supports TypeScript 7.
+
+## Shopping-list reorder sends one PATCH per shifted item
+
+`ShoppingListContent`'s `handleDragEnd` (`frontend/src/routes/shopping-list.tsx`,
+RAV-15) recomputes the whole list's positions as dense integers (0..n-1)
+after a drag and PATCHes every item whose index actually changed - moving
+an item from the top to the bottom of a 20-item list fires 20 PATCH
+requests (and 20 `item.updated` socket broadcasts to every other member's
+screen), not one.
+
+**Why not fixed**: `ShoppingListItem.position` is a plain dense `Int`
+(schema comment: "no uniqueness constraint, ties are fine, the frontend
+just needs *an* order, not a dense/gapless one" - true for creation, not
+for cheap reordering). A real fix needs sparse/fractional positions
+(step-1000 gaps, insert at the midpoint of two neighbors) on the backend,
+a migration for existing rows, and DTO validation changes - out of scope
+for a frontend-only issue (RAV-15's title).
+
+**Consequence to watch for**: reordering a long list is chattier than it
+needs to be - more requests, more realtime traffic, more Prisma writes.
+Household shopping lists are small in practice (tens of items), so this
+is a latency/traffic nit, not a correctness bug: every write is still a
+real, valid position and the final order is always right.
+
+**Resolves when**: the list sizes people actually hit make this worth a
+backend migration to sparse positions, or the backend gains a dedicated
+bulk-reorder endpoint.
