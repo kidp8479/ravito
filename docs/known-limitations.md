@@ -5,6 +5,36 @@ instead of forgotten ones. Unlike `docs/lessons.md` (mistakes already fixed),
 these are live: check here before "fixing" one by surprise, and update or
 remove the entry once it's actually resolved.
 
+## Inventory quantity +/- can lose an update under true concurrent edits
+
+`InventoryRow` (`frontend/src/routes/inventory.tsx`, RAV-12) computes the
+next quantity as `item.quantity +/- 1` from the last data the query cache
+fetched, then sends that absolute value via `PATCH .../inventory/:id`. Two
+near-simultaneous clicks from different devices/tabs (both reading the
+same stale quantity) can result in one increment being silently
+overwritten by the other, instead of both being applied.
+
+**Why not fixed**: a real fix needs the backend write to be atomic
+(Prisma's `{ quantity: { increment: delta } }`, which Postgres executes as
+a single `UPDATE ... SET quantity = quantity + $delta`, race-free even
+under concurrent writers) plus a DB-level `CHECK (quantity >= 0)` so a
+racing decrement below zero is rejected rather than silently clamped -
+a new endpoint, a migration, and error-code handling, not a frontend-only
+change. The inventory screen also has no realtime sync yet (unlike the
+shopping list, PLAN.md Lot 3), so a click's effect on another device
+already will not be reflected live regardless of this specific race -
+worth solving properly together with that, not in isolation now.
+
+**Consequence to watch for**: in a household with several people adjusting
+the same item's quantity at nearly the same moment (across devices), the
+final count can undercount by one per colliding pair of clicks. A single
+user single-tab click is unaffected (the +/- buttons disable while a
+request is in flight).
+
+**Resolves when**: inventory gets the same kind of realtime/atomic-write
+treatment planned for the shopping list in Lot 3 - add the atomic
+increment endpoint then.
+
 ## The household screen only shows the caller's first household
 
 `HouseholdPage` (`frontend/src/routes/household.tsx`, RAV-8) renders only
