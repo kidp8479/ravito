@@ -135,6 +135,21 @@ describe('Purchase history (e2e)', () => {
       .expect(400);
   });
 
+  it('rejects a unitPrice beyond what the Decimal(10, 2) column holds', async () => {
+    const { owner, household, product } = await setupWithProduct();
+
+    await request(server)
+      .post(`/households/${household.id}/purchase-history`)
+      .set(...auth(owner.accessToken))
+      .send({
+        productId: product.id,
+        quantity: 1,
+        unit: 'L',
+        unitPrice: 100_000_000,
+      })
+      .expect(400);
+  });
+
   it('keeps the log entry after its product is deleted, with productId nulled', async () => {
     const { owner, household, product } = await setupWithProduct();
     await request(server)

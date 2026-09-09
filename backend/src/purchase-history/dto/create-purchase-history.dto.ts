@@ -6,6 +6,7 @@ import {
   IsPositive,
   IsString,
   Length,
+  Max,
 } from 'class-validator';
 
 export class CreatePurchaseHistoryDto {
@@ -27,8 +28,13 @@ export class CreatePurchaseHistoryDto {
   @Length(1, 20)
   unit!: string;
 
+  // Bounded to what the schema's Decimal(10, 2) column can actually hold
+  // (backend/prisma/schema.prisma) - without this, a value that overflows
+  // it fails inside the insert as a raw Postgres numeric-field-overflow
+  // error (a 500), instead of a clean 400 caught before the write.
   @IsOptional()
   @IsNumber()
   @IsPositive()
+  @Max(99_999_999.99)
   unitPrice?: number;
 }
