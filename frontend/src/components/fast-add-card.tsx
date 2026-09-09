@@ -16,6 +16,7 @@ import {
   useSearchProducts,
   type Product,
 } from '@/lib/inventory';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
 
 // "Search the household's product catalogue, create on the fly if absent"
 // fast-add flow (PLAN.md).
@@ -28,7 +29,13 @@ function FastAddCard({ householdId }: { householdId: string }) {
   const [unit, setUnit] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const search = useSearchProducts(householdId, selectedProductId ? '' : name);
+  // Debounced: without it, every keystroke fires its own search request
+  // against the household's product catalogue.
+  const debouncedName = useDebouncedValue(name, 250);
+  const search = useSearchProducts(
+    householdId,
+    selectedProductId ? '' : debouncedName,
+  );
   const createProduct = useCreateProduct(householdId);
   const createItem = useCreateInventoryItem(householdId);
   const pending = createProduct.isPending || createItem.isPending;
@@ -45,8 +52,15 @@ function FastAddCard({ householdId }: { householdId: string }) {
     event.preventDefault();
     setError(null);
     try {
-      const productId =
-        selectedProductId ?? (await createProduct.mutateAsync(name)).id;
+      let productId = selectedProductId;
+      if (!productId) {
+        productId = (await createProduct.mutateAsync(name)).id;
+        // Recorded before the next await: if createItem below fails (a
+        // network blip, say), the product was still created - resubmitting
+        // must reuse it via createItem alone, not call createProduct again
+        // and 409 on the name it just claimed.
+        setSelectedProductId(productId);
+      }
       await createItem.mutateAsync({
         productId,
         quantity: Number(quantity),
