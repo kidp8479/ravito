@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ShoppingListItem } from '@prisma/client';
-import { isRecordNotFoundError } from '../common/prisma/errors';
+import {
+  isForeignKeyError,
+  isRecordNotFoundError,
+} from '../common/prisma/errors';
 import { householdScopedShoppingListItems } from '../common/prisma/household-scoped';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateShoppingListItemDto } from './dto/create-shopping-list-item.dto';
@@ -20,7 +23,18 @@ export class ShoppingListService {
     // tie under concurrent creates, which is fine (schema comment: no
     // uniqueness constraint, ties are fine for a manual-reorder list).
     const position = await scoped.count();
-    return scoped.create({ ...dto, addedById, position });
+    try {
+      return await scoped.create({ ...dto, addedById, position });
+    } catch (error) {
+      // The linked product existed when assertProductInHousehold checked
+      // (household-scoped.ts), but was deleted before this insert
+      // committed - same race InventoryService.create() closes (RAV-11),
+      // missed here at first. Functionally the same as "not found".
+      if (isForeignKeyError(error)) {
+        throw new NotFoundException('Product not found');
+      }
+      throw error;
+    }
   }
 
   list(householdId: string): Promise<ShoppingListItem[]> {

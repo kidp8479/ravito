@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
-import { recordNotFoundError } from '../../test/prisma-errors';
+import { foreignKeyError, recordNotFoundError } from '../../test/prisma-errors';
 import { ShoppingListService } from './shopping-list.service';
 
 describe('ShoppingListService', () => {
@@ -62,6 +62,20 @@ describe('ShoppingListService', () => {
           householdId: 'h1',
         },
       });
+    });
+
+    it('maps the linked product vanishing mid-request (FK violation) to 404', async () => {
+      prisma.shoppingListItem.count.mockResolvedValue(0);
+      prisma.shoppingListItem.create.mockRejectedValue(foreignKeyError());
+
+      await expect(
+        service.create('h1', 'u1', {
+          productId: 'p1',
+          rawLabel: 'Lait',
+          quantity: 1,
+          unit: 'L',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
