@@ -1,14 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { FormError, FormField } from '@/components/form';
-import { ProductSuggestions } from '@/components/product-suggestions';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { FormField } from '@/components/form';
+import { ProductPickerCard } from '@/components/product-picker-card';
 import { Input } from '@/components/ui/input';
 import { getErrorMessage } from '@/lib/api';
 import { useCreateProduct } from '@/lib/inventory';
@@ -58,78 +50,63 @@ function AddPurchaseCard({ householdId }: { householdId: string }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Log a purchase</CardTitle>
-        <CardDescription>
-          Search the catalogue, or add a new product.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-          <FormField label="Product" htmlFor="purchase-name">
-            <Input
-              id="purchase-name"
-              required
-              maxLength={100}
-              autoComplete="off"
-              value={picker.name}
-              onChange={(event) => picker.changeName(event.target.value)}
-            />
-            <ProductSuggestions
-              suggestions={picker.suggestions}
-              onSelect={picker.selectProduct}
-            />
-          </FormField>
-          <div className="flex gap-4">
-            <FormField label="Quantity" htmlFor="purchase-quantity">
-              <Input
-                id="purchase-quantity"
-                type="number"
-                min={0}
-                step="any"
-                required
-                value={quantity}
-                onChange={(event) => setQuantity(event.target.value)}
-              />
-            </FormField>
-            <FormField label="Unit" htmlFor="purchase-unit">
-              <Input
-                id="purchase-unit"
-                required
-                maxLength={20}
-                value={picker.unit}
-                onChange={(event) => picker.setUnit(event.target.value)}
-              />
-            </FormField>
-          </div>
-          <div className="flex gap-4">
-            <FormField label="Price (optional)" htmlFor="purchase-price">
-              <Input
-                id="purchase-price"
-                type="number"
-                min={0}
-                step="0.01"
-                value={unitPrice}
-                onChange={(event) => setUnitPrice(event.target.value)}
-              />
-            </FormField>
-            <FormField label="Date (optional)" htmlFor="purchase-date">
-              <Input
-                id="purchase-date"
-                type="date"
-                value={purchasedOn}
-                onChange={(event) => setPurchasedOn(event.target.value)}
-              />
-            </FormField>
-          </div>
-          <FormError message={error} />
-          <Button type="submit" disabled={pending}>
-            {pending ? 'Logging...' : 'Log purchase'}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <ProductPickerCard
+      title="Log a purchase"
+      description="Search the catalogue, or add a new product."
+      picker={picker}
+      productFieldId="purchase-name"
+      onSubmit={handleSubmit}
+      pending={pending}
+      submitLabel="Log purchase"
+      pendingLabel="Logging..."
+      error={error}
+    >
+      {/* min > 0: CreatePurchaseHistoryDto.quantity is @IsPositive(),
+          not @Min(0) like inventory's ("0 in stock" is valid, "logged 0
+          of something" isn't). */}
+      <div className="flex gap-4">
+        <FormField label="Quantity" htmlFor="purchase-quantity">
+          <Input
+            id="purchase-quantity"
+            type="number"
+            min={0.001}
+            step="any"
+            required
+            value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
+          />
+        </FormField>
+        <FormField label="Unit" htmlFor="purchase-unit">
+          <Input
+            id="purchase-unit"
+            required
+            maxLength={20}
+            value={picker.unit}
+            onChange={(event) => picker.setUnit(event.target.value)}
+          />
+        </FormField>
+      </div>
+      <div className="flex gap-4">
+        <FormField label="Price (optional)" htmlFor="purchase-price">
+          <Input
+            id="purchase-price"
+            type="number"
+            min={0.01}
+            step="0.01"
+            value={unitPrice}
+            onChange={(event) => setUnitPrice(event.target.value)}
+          />
+        </FormField>
+        <FormField label="Date (optional)" htmlFor="purchase-date">
+          <Input
+            id="purchase-date"
+            type="date"
+            value={purchasedOn}
+            onChange={(event) => setPurchasedOn(event.target.value)}
+          />
+        </FormField>
+      </div>
+    </ProductPickerCard>
   );
 }
 

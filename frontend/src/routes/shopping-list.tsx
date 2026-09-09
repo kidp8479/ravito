@@ -18,7 +18,6 @@ import { AddShoppingListItemCard } from '@/components/add-shopping-list-item-car
 import { AppHeader } from '@/components/app-header';
 import { ClearCheckedButton } from '@/components/clear-checked-button';
 import { ShoppingListRow } from '@/components/shopping-list-row';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ensureAuthLoaded } from '@/lib/api';
 import { getAuthState } from '@/lib/auth-store';
@@ -46,17 +45,7 @@ function ShoppingListPage() {
 
   return (
     <main className="mx-auto flex min-h-svh max-w-lg flex-col gap-6 p-8">
-      <AppHeader>
-        <Button asChild variant="ghost">
-          <Link to="/household">Household</Link>
-        </Button>
-        <Button asChild variant="ghost">
-          <Link to="/inventory">Inventory</Link>
-        </Button>
-        <Button asChild variant="ghost">
-          <Link to="/purchase-history">Purchase history</Link>
-        </Button>
-      </AppHeader>
+      <AppHeader />
 
       {household.isLoading && (
         <p className="text-muted-foreground text-sm">Loading...</p>

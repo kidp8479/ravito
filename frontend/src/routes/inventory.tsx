@@ -67,17 +67,7 @@ function InventoryPage() {
 
   return (
     <main className="mx-auto flex min-h-svh max-w-lg flex-col gap-6 p-8">
-      <AppHeader>
-        <Button asChild variant="ghost">
-          <Link to="/household">Household</Link>
-        </Button>
-        <Button asChild variant="ghost">
-          <Link to="/shopping-list">Shopping list</Link>
-        </Button>
-        <Button asChild variant="ghost">
-          <Link to="/purchase-history">Purchase history</Link>
-        </Button>
-      </AppHeader>
+      <AppHeader />
 
       {household.isLoading && (
         <p className="text-muted-foreground text-sm">Loading...</p>

@@ -1,14 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { FormError, FormField } from '@/components/form';
-import { ProductSuggestions } from '@/components/product-suggestions';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { FormField } from '@/components/form';
+import { ProductPickerCard } from '@/components/product-picker-card';
 import { Input } from '@/components/ui/input';
 import { getErrorMessage } from '@/lib/api';
 import { useCreateInventoryItem, useCreateProduct } from '@/lib/inventory';
@@ -51,58 +43,40 @@ function FastAddCard({ householdId }: { householdId: string }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Add to inventory</CardTitle>
-        <CardDescription>
-          Search the catalogue, or add a new product.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-          <FormField label="Product" htmlFor="fast-add-name">
-            <Input
-              id="fast-add-name"
-              required
-              maxLength={100}
-              autoComplete="off"
-              value={picker.name}
-              onChange={(event) => picker.changeName(event.target.value)}
-            />
-            <ProductSuggestions
-              suggestions={picker.suggestions}
-              onSelect={picker.selectProduct}
-            />
-          </FormField>
-          <div className="flex gap-4">
-            <FormField label="Quantity" htmlFor="fast-add-quantity">
-              <Input
-                id="fast-add-quantity"
-                type="number"
-                min={0}
-                step="any"
-                required
-                value={quantity}
-                onChange={(event) => setQuantity(event.target.value)}
-              />
-            </FormField>
-            <FormField label="Unit" htmlFor="fast-add-unit">
-              <Input
-                id="fast-add-unit"
-                required
-                maxLength={20}
-                value={picker.unit}
-                onChange={(event) => picker.setUnit(event.target.value)}
-              />
-            </FormField>
-          </div>
-          <FormError message={error} />
-          <Button type="submit" disabled={pending}>
-            {pending ? 'Adding...' : 'Add'}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <ProductPickerCard
+      title="Add to inventory"
+      description="Search the catalogue, or add a new product."
+      picker={picker}
+      productFieldId="fast-add-name"
+      onSubmit={handleSubmit}
+      pending={pending}
+      submitLabel="Add"
+      pendingLabel="Adding..."
+      error={error}
+    >
+      <div className="flex gap-4">
+        <FormField label="Quantity" htmlFor="fast-add-quantity">
+          <Input
+            id="fast-add-quantity"
+            type="number"
+            min={0}
+            step="any"
+            required
+            value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
+          />
+        </FormField>
+        <FormField label="Unit" htmlFor="fast-add-unit">
+          <Input
+            id="fast-add-unit"
+            required
+            maxLength={20}
+            value={picker.unit}
+            onChange={(event) => picker.setUnit(event.target.value)}
+          />
+        </FormField>
+      </div>
+    </ProductPickerCard>
   );
 }
 

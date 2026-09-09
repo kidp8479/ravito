@@ -1,14 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { FormError, FormField } from '@/components/form';
-import { ProductSuggestions } from '@/components/product-suggestions';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { FormField } from '@/components/form';
+import { ProductPickerCard } from '@/components/product-picker-card';
 import { Input } from '@/components/ui/input';
 import { getErrorMessage } from '@/lib/api';
 import { useCreateShoppingListItem } from '@/lib/shopping-list';
@@ -43,58 +35,44 @@ function AddShoppingListItemCard({ householdId }: { householdId: string }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Add to the shopping list</CardTitle>
-        <CardDescription>
-          Type a free-text item, or pick one from the catalogue.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-          <FormField label="Item" htmlFor="shopping-list-name">
-            <Input
-              id="shopping-list-name"
-              required
-              maxLength={100}
-              autoComplete="off"
-              value={picker.name}
-              onChange={(event) => picker.changeName(event.target.value)}
-            />
-            <ProductSuggestions
-              suggestions={picker.suggestions}
-              onSelect={picker.selectProduct}
-            />
-          </FormField>
-          <div className="flex gap-4">
-            <FormField label="Quantity" htmlFor="shopping-list-quantity">
-              <Input
-                id="shopping-list-quantity"
-                type="number"
-                min={0}
-                step="any"
-                required
-                value={quantity}
-                onChange={(event) => setQuantity(event.target.value)}
-              />
-            </FormField>
-            <FormField label="Unit" htmlFor="shopping-list-unit">
-              <Input
-                id="shopping-list-unit"
-                required
-                maxLength={20}
-                value={picker.unit}
-                onChange={(event) => picker.setUnit(event.target.value)}
-              />
-            </FormField>
-          </div>
-          <FormError message={error} />
-          <Button type="submit" disabled={createItem.isPending}>
-            {createItem.isPending ? 'Adding...' : 'Add'}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <ProductPickerCard
+      title="Add to the shopping list"
+      description="Type a free-text item, or pick one from the catalogue."
+      picker={picker}
+      productFieldId="shopping-list-name"
+      productFieldLabel="Item"
+      onSubmit={handleSubmit}
+      pending={createItem.isPending}
+      submitLabel="Add"
+      pendingLabel="Adding..."
+      error={error}
+    >
+      <div className="flex gap-4">
+        {/* min > 0: CreateShoppingListItemDto.quantity is @IsPositive(),
+            not @Min(0) like inventory's - a 0-quantity shopping-list
+            item isn't meaningful the way 0-in-stock is. */}
+        <FormField label="Quantity" htmlFor="shopping-list-quantity">
+          <Input
+            id="shopping-list-quantity"
+            type="number"
+            min={0.001}
+            step="any"
+            required
+            value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
+          />
+        </FormField>
+        <FormField label="Unit" htmlFor="shopping-list-unit">
+          <Input
+            id="shopping-list-unit"
+            required
+            maxLength={20}
+            value={picker.unit}
+            onChange={(event) => picker.setUnit(event.target.value)}
+          />
+        </FormField>
+      </div>
+    </ProductPickerCard>
   );
 }
 
