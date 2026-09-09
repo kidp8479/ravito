@@ -77,6 +77,9 @@ describe('Purchase history (e2e)', () => {
       productName: 'Lait',
       quantity: 2,
       unit: 'L',
+      // A string, not a number: real Prisma's Decimal type serializes to
+      // JSON that way, and the fake mirrors it (fake-prisma.ts).
+      unitPrice: '1.5',
       source: 'MANUAL',
     });
 
@@ -86,7 +89,58 @@ describe('Purchase history (e2e)', () => {
       .expect(200);
     const entries = listRes.body as PurchaseHistoryBody[];
     expect(entries).toHaveLength(1);
-    expect(entries[0].id).toBe(created.id);
+    expect(entries[0]).toMatchObject({ id: created.id, unitPrice: '1.5' });
+  });
+
+  it('omitting unitPrice leaves it null, not "null" or 0', async () => {
+    const { owner, household, product } = await setupWithProduct();
+
+    const res = await request(server)
+      .post(`/households/${household.id}/purchase-history`)
+      .set(...auth(owner.accessToken))
+      .send({ productId: product.id, quantity: 1, unit: 'L' })
+      .expect(201);
+
+    expect((res.body as PurchaseHistoryBody).unitPrice).toBeNull();
+  });
+
+  it('caps the list at the given limit, most recent first', async () => {
+    const { owner, household, product } = await setupWithProduct();
+    for (const purchasedOn of [
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-02T00:00:00.000Z',
+      '2026-01-03T00:00:00.000Z',
+    ]) {
+      await request(server)
+        .post(`/households/${household.id}/purchase-history`)
+        .set(...auth(owner.accessToken))
+        .send({ productId: product.id, quantity: 1, unit: 'L', purchasedOn })
+        .expect(201);
+    }
+
+    const res = await request(server)
+      .get(`/households/${household.id}/purchase-history?limit=2`)
+      .set(...auth(owner.accessToken))
+      .expect(200);
+    const entries = res.body as PurchaseHistoryBody[];
+    expect(entries).toHaveLength(2);
+    expect(entries.map((e) => e.purchasedOn)).toEqual([
+      '2026-01-03T00:00:00.000Z',
+      '2026-01-02T00:00:00.000Z',
+    ]);
+  });
+
+  it('rejects a limit outside the allowed range', async () => {
+    const { owner, household } = await setupWithProduct();
+
+    await request(server)
+      .get(`/households/${household.id}/purchase-history?limit=0`)
+      .set(...auth(owner.accessToken))
+      .expect(400);
+    await request(server)
+      .get(`/households/${household.id}/purchase-history?limit=201`)
+      .set(...auth(owner.accessToken))
+      .expect(400);
   });
 
   it('accepts an explicit purchasedOn date', async () => {

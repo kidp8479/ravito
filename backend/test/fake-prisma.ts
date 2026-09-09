@@ -86,7 +86,9 @@ interface FakePurchaseHistory {
   purchasedOn: Date;
   quantity: number;
   unit: string;
-  unitPrice: number | null;
+  // A string, not a number: mirrors real Prisma's Decimal type, which
+  // serializes to JSON as a string (e.g. "1.50"), not a plain number.
+  unitPrice: string | null;
   source: 'MANUAL' | 'RECEIPT';
   createdAt: Date;
 }
@@ -721,9 +723,11 @@ export function createFakePrisma() {
         ({
           where,
           orderBy,
+          take,
         }: {
           where?: { householdId?: string };
           orderBy?: { purchasedOn?: 'asc' | 'desc' };
+          take?: number;
         }) => {
           let rows = [...purchaseHistoryById.values()].filter(
             (entry) =>
@@ -737,7 +741,7 @@ export function createFakePrisma() {
                 : a.purchasedOn.getTime() - b.purchasedOn.getTime(),
             );
           }
-          return Promise.resolve(rows);
+          return Promise.resolve(take ? rows.slice(0, take) : rows);
         },
       ),
       create: jest.fn(
@@ -759,6 +763,12 @@ export function createFakePrisma() {
             source: 'MANUAL',
             createdAt: new Date(),
             ...data,
+            // Real Prisma's Decimal type has a custom toJSON() that
+            // serializes as a string (e.g. "1.50"), not a plain number -
+            // stored as a string here too so an e2e spec asserting on
+            // the HTTP response's unitPrice exercises that same shape
+            // instead of only the real-Postgres integration tier doing so.
+            unitPrice: data.unitPrice === null ? null : String(data.unitPrice),
           };
           purchaseHistoryById.set(entry.id, entry);
           return Promise.resolve(entry);

@@ -29,11 +29,13 @@ export class CreatePurchaseHistoryDto {
   unit!: string;
 
   // Bounded to what the schema's Decimal(10, 2) column can actually hold
-  // (backend/prisma/schema.prisma) - without this, a value that overflows
-  // it fails inside the insert as a raw Postgres numeric-field-overflow
-  // error (a 500), instead of a clean 400 caught before the write.
+  // (backend/prisma/schema.prisma) - without maxDecimalPlaces and @Max, a
+  // value that overflows or has more precision than the column allows
+  // either fails inside the insert as a raw Postgres error (a 500) or
+  // gets silently rounded on write, instead of a clean 400 caught before
+  // the write.
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   @Max(99_999_999.99)
   unitPrice?: number;

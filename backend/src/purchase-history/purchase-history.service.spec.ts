@@ -109,13 +109,26 @@ describe('PurchaseHistoryService', () => {
   });
 
   describe('list', () => {
-    it('orders by purchasedOn, most recent first', async () => {
+    it('orders by purchasedOn, most recent first, defaulting take to 50', async () => {
       prisma.purchaseHistory.findMany.mockResolvedValue([]);
 
       await service.list('h1');
 
       expect(prisma.purchaseHistory.findMany).toHaveBeenCalledWith({
         orderBy: { purchasedOn: 'desc' },
+        take: 50,
+        where: { householdId: 'h1' },
+      });
+    });
+
+    it('passes a caller-given limit through as take', async () => {
+      prisma.purchaseHistory.findMany.mockResolvedValue([]);
+
+      await service.list('h1', 10);
+
+      expect(prisma.purchaseHistory.findMany).toHaveBeenCalledWith({
+        orderBy: { purchasedOn: 'desc' },
+        take: 10,
         where: { householdId: 'h1' },
       });
     });

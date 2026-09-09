@@ -6,12 +6,14 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { PurchaseHistory } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { HouseholdMembershipGuard } from '../common/guards/household-membership.guard';
 import { CreatePurchaseHistoryDto } from './dto/create-purchase-history.dto';
+import { ListPurchaseHistoryDto } from './dto/list-purchase-history.dto';
 import { PurchaseHistoryService } from './purchase-history.service';
 
 @UseGuards(JwtAuthGuard, HouseholdMembershipGuard)
@@ -29,7 +31,10 @@ export class PurchaseHistoryController {
   }
 
   @Get()
-  list(@Param('id') householdId: string): Promise<PurchaseHistory[]> {
-    return this.purchaseHistory.list(householdId);
+  list(
+    @Param('id') householdId: string,
+    @Query() query: ListPurchaseHistoryDto,
+  ): Promise<PurchaseHistory[]> {
+    return this.purchaseHistory.list(householdId, query.limit);
   }
 }

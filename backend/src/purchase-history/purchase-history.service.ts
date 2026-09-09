@@ -35,9 +35,14 @@ export class PurchaseHistoryService {
     }
   }
 
-  list(householdId: string): Promise<PurchaseHistory[]> {
+  // Defaults to 50, capped at 200 (ListPurchaseHistoryDto) - an
+  // append-only log has no natural upper bound on row count, unlike this
+  // codebase's other list endpoints (catalogue/inventory/shopping-list),
+  // whose size stays bounded by how many distinct products exist.
+  list(householdId: string, limit = 50): Promise<PurchaseHistory[]> {
     return householdScopedPurchaseHistory(this.prisma, householdId).findMany({
       orderBy: { purchasedOn: 'desc' },
+      take: limit,
     });
   }
 }
