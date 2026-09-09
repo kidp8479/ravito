@@ -4,7 +4,9 @@ import type { ReactNode } from 'react';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setAccessToken, clearAccessToken } from './auth-store';
+import type { InventoryItem } from './inventory';
 import {
+  useAddCheckedItemToInventory,
   useCreateShoppingListItem,
   useDeleteShoppingListItem,
   useShoppingListItems,
@@ -276,5 +278,77 @@ describe('shopping list REST hooks', () => {
     expect(url).toContain(`/households/h1/shopping-list/${item.id}`);
     expect(init.method).toBe('DELETE');
     expect(queryClient.getQueryData(listKey)).toEqual([]);
+  });
+});
+
+describe('useAddCheckedItemToInventory', () => {
+  const checkedItem: ShoppingListItem = { ...item, productId: 'p1' };
+
+  it('does nothing for a free-text item with no productId', async () => {
+    const { result } = renderWithClient(() =>
+      useAddCheckedItemToInventory('h1'),
+    );
+
+    await act(async () => {
+      await result.current.mutateAsync({ item, inventory: [] });
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('POSTs a new inventory item when the product is not in inventory yet', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(201, {
+        id: 'inv-1',
+        quantity: 1,
+        unit: 'L',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        product: { id: 'p1', name: 'Lait', category: null, defaultUnit: null },
+      }),
+    );
+
+    const { result } = renderWithClient(() =>
+      useAddCheckedItemToInventory('h1'),
+    );
+
+    await act(async () => {
+      await result.current.mutateAsync({ item: checkedItem, inventory: [] });
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/households/h1/inventory');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      productId: 'p1',
+      quantity: 1,
+      unit: 'L',
+    });
+  });
+
+  it('PATCHes the existing inventory item, adding the shopping-list quantity', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
+    const existing: InventoryItem = {
+      id: 'inv-1',
+      quantity: 3,
+      unit: 'L',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      product: { id: 'p1', name: 'Lait', category: null, defaultUnit: null },
+    };
+
+    const { result } = renderWithClient(() =>
+      useAddCheckedItemToInventory('h1'),
+    );
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        item: checkedItem,
+        inventory: [existing],
+      });
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/households/h1/inventory/inv-1');
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({ quantity: 4 });
   });
 });

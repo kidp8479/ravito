@@ -11,35 +11,27 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { getErrorMessage } from '@/lib/api';
-import { useCreateInventoryItem, useCreateProduct } from '@/lib/inventory';
+import { useCreateShoppingListItem } from '@/lib/shopping-list';
 import { useProductPicker } from '@/lib/use-product-picker';
 
-// "Search the household's product catalogue, create on the fly if absent"
-// fast-add flow (PLAN.md).
-function FastAddCard({ householdId }: { householdId: string }) {
+// Free text (rawLabel only) or a catalogue pick (rawLabel + productId) -
+// unlike FastAddCard (inventory), a free-text shopping-list item never
+// needs a Product row created for it (schema: productId is optional,
+// rawLabel always set).
+function AddShoppingListItemCard({ householdId }: { householdId: string }) {
   const picker = useProductPicker(householdId);
   const [quantity, setQuantity] = useState('1');
   const [error, setError] = useState<string | null>(null);
 
-  const createProduct = useCreateProduct(householdId);
-  const createItem = useCreateInventoryItem(householdId);
-  const pending = createProduct.isPending || createItem.isPending;
+  const createItem = useCreateShoppingListItem(householdId);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     try {
-      let productId = picker.selectedProductId;
-      if (!productId) {
-        productId = (await createProduct.mutateAsync(picker.name)).id;
-        // Recorded before the next await: if createItem below fails (a
-        // network blip, say), the product was still created - resubmitting
-        // must reuse it via createItem alone, not call createProduct again
-        // and 409 on the name it just claimed.
-        picker.setSelectedProductId(productId);
-      }
       await createItem.mutateAsync({
-        productId,
+        productId: picker.selectedProductId ?? undefined,
+        rawLabel: picker.name.trim(),
         quantity: Number(quantity),
         unit: picker.unit,
       });
@@ -53,16 +45,16 @@ function FastAddCard({ householdId }: { householdId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Add to inventory</CardTitle>
+        <CardTitle>Add to the shopping list</CardTitle>
         <CardDescription>
-          Search the catalogue, or add a new product.
+          Type a free-text item, or pick one from the catalogue.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-          <FormField label="Product" htmlFor="fast-add-name">
+          <FormField label="Item" htmlFor="shopping-list-name">
             <Input
-              id="fast-add-name"
+              id="shopping-list-name"
               required
               maxLength={100}
               autoComplete="off"
@@ -75,9 +67,9 @@ function FastAddCard({ householdId }: { householdId: string }) {
             />
           </FormField>
           <div className="flex gap-4">
-            <FormField label="Quantity" htmlFor="fast-add-quantity">
+            <FormField label="Quantity" htmlFor="shopping-list-quantity">
               <Input
-                id="fast-add-quantity"
+                id="shopping-list-quantity"
                 type="number"
                 min={0}
                 step="any"
@@ -86,9 +78,9 @@ function FastAddCard({ householdId }: { householdId: string }) {
                 onChange={(event) => setQuantity(event.target.value)}
               />
             </FormField>
-            <FormField label="Unit" htmlFor="fast-add-unit">
+            <FormField label="Unit" htmlFor="shopping-list-unit">
               <Input
-                id="fast-add-unit"
+                id="shopping-list-unit"
                 required
                 maxLength={20}
                 value={picker.unit}
@@ -97,8 +89,8 @@ function FastAddCard({ householdId }: { householdId: string }) {
             </FormField>
           </div>
           <FormError message={error} />
-          <Button type="submit" disabled={pending}>
-            {pending ? 'Adding...' : 'Add'}
+          <Button type="submit" disabled={createItem.isPending}>
+            {createItem.isPending ? 'Adding...' : 'Add'}
           </Button>
         </form>
       </CardContent>
@@ -106,4 +98,4 @@ function FastAddCard({ householdId }: { householdId: string }) {
   );
 }
 
-export { FastAddCard };
+export { AddShoppingListItemCard };

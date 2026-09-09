@@ -1,8 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { API_URL, apiFetch, refreshAccessToken } from './api';
 import { useAuthState } from './auth';
+import {
+  useCreateInventoryItem,
+  useUpdateInventoryItem,
+  type InventoryItem,
+} from './inventory';
 
 export interface ShoppingListItem {
   id: string;
@@ -185,4 +190,74 @@ export function useShoppingListRealtime(householdId: string | undefined) {
       socket.disconnect();
     };
   }, [householdId, accessToken, queryClient]);
+}
+
+// PLAN.md's "checked item -> +quantity in inventory" togglable rule.
+// productId-linked items only (a free-text item has no product to file
+// under). Client-orchestrated the same way FastAddCard already is (check
+// the current cache, create or update): a household member checking the
+// same item on two devices in the same instant can race two "not in
+// inventory yet" reads into two POSTs, one of which 409s - the same class
+// of race docs/known-limitations.md already accepts for inventory +/-.
+export function useAddCheckedItemToInventory(householdId: string) {
+  const createInventory = useCreateInventoryItem(householdId);
+  const updateInventory = useUpdateInventoryItem(householdId);
+
+  return useMutation({
+    mutationFn: async ({
+      item,
+      inventory,
+    }: {
+      item: ShoppingListItem;
+      inventory: InventoryItem[];
+    }) => {
+      if (!item.productId) return;
+      const existing = inventory.find((i) => i.product.id === item.productId);
+      if (existing) {
+        await updateInventory.mutateAsync({
+          id: existing.id,
+          quantity: existing.quantity + item.quantity,
+        });
+      } else {
+        await createInventory.mutateAsync({
+          productId: item.productId,
+          quantity: item.quantity,
+          unit: item.unit,
+        });
+      }
+    },
+  });
+}
+
+// Whether the rule above runs automatically on check: a per-device UI
+// preference, not household state, so it lives in localStorage rather
+// than behind a new backend setting.
+const AUTO_ADD_TO_INVENTORY_KEY = 'ravito:autoAddCheckedToInventory';
+
+function readAutoAddToInventory(): boolean {
+  try {
+    return localStorage.getItem(AUTO_ADD_TO_INVENTORY_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function useAutoAddToInventorySetting(): [
+  boolean,
+  (next: boolean) => void,
+] {
+  const [enabled, setEnabled] = useState(readAutoAddToInventory);
+
+  function set(next: boolean) {
+    setEnabled(next);
+    try {
+      if (next) localStorage.setItem(AUTO_ADD_TO_INVENTORY_KEY, '1');
+      else localStorage.removeItem(AUTO_ADD_TO_INVENTORY_KEY);
+    } catch {
+      // Storage unavailable (private mode, disabled) - the setting just
+      // won't survive a reload, no worse than defaulting to off.
+    }
+  }
+
+  return [enabled, set];
 }

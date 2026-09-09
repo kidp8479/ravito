@@ -71,6 +71,9 @@ function InventoryPage() {
         <Button asChild variant="ghost">
           <Link to="/household">Household</Link>
         </Button>
+        <Button asChild variant="ghost">
+          <Link to="/shopping-list">Shopping list</Link>
+        </Button>
       </AppHeader>
 
       {household.isLoading && (
