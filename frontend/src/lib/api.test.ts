@@ -132,6 +132,44 @@ describe('refreshAccessToken', () => {
     expect(second).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('clears the session on a genuine 401 from the server', async () => {
+    const { api, authStore, fetchMock } = await freshApi();
+    authStore.setAccessToken('stale-token');
+    fetchMock.mockResolvedValueOnce(jsonResponse(401, {}));
+
+    const result = await api.refreshAccessToken();
+
+    expect(result).toBe(false);
+    expect(authStore.getAuthState()).toEqual({ status: 'anonymous' });
+  });
+
+  it('assumes still-authenticated (RAV-19: offline) on a network error, when a session hint exists', async () => {
+    const { api, authStore, fetchMock } = await freshApi();
+    localStorage.setItem('ravito:hasSession', '1');
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    const result = await api.refreshAccessToken();
+
+    expect(result).toBe(false);
+    expect(authStore.getAuthState()).toEqual({
+      status: 'authenticated',
+      accessToken: null,
+    });
+    // Not the server saying "you're logged out" - the hint that a
+    // session existed stays, unlike the genuine-401 case above.
+    expect(authStore.hasSessionHint()).toBe(true);
+  });
+
+  it('clears the session on a network error with no session hint (e.g. another tab already logged out)', async () => {
+    const { api, authStore, fetchMock } = await freshApi();
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    const result = await api.refreshAccessToken();
+
+    expect(result).toBe(false);
+    expect(authStore.getAuthState()).toEqual({ status: 'anonymous' });
+  });
 });
 
 describe('ensureAuthLoaded', () => {
@@ -155,5 +193,22 @@ describe('ensureAuthLoaded', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(authStore.getAccessToken()).toBe('restored');
+  });
+
+  it('renders the app as authenticated-offline when starting up with no network (RAV-19)', async () => {
+    localStorage.setItem('ravito:hasSession', '1');
+    const { api, authStore, fetchMock } = await freshApi();
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    await api.ensureAuthLoaded();
+
+    // Not 'anonymous': a route guard checking status !== 'authenticated'
+    // must not redirect to /login just because the initial refresh
+    // couldn't reach the server - that would block the persisted query
+    // cache from ever being shown, defeating offline support entirely.
+    expect(authStore.getAuthState()).toEqual({
+      status: 'authenticated',
+      accessToken: null,
+    });
   });
 });

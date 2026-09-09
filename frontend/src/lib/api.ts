@@ -3,6 +3,7 @@ import {
   getAccessToken,
   hasSessionHint,
   setAccessToken,
+  setAuthenticatedOffline,
 } from './auth-store';
 
 // Exported: the shopping-list realtime socket (RAV-14) connects to the
@@ -61,6 +62,8 @@ async function doRefresh(): Promise<boolean> {
       skipAuthRetry: true,
     });
     if (!res.ok) {
+      // The server actually responded and said no (expired/revoked
+      // refresh cookie) - genuinely not authenticated.
       clearAccessToken();
       return false;
     }
@@ -68,7 +71,25 @@ async function doRefresh(): Promise<boolean> {
     setAccessToken(data.accessToken);
     return true;
   } catch {
-    clearAccessToken();
+    // A network-level failure (offline, DNS, connection refused) never
+    // reached the server at all - not proof the session is invalid, just
+    // that nothing could be confirmed right now. Clearing it here would
+    // force-log-out an offline user for being offline, defeating RAV-19's
+    // whole point (cached data should still render). Assume the existing
+    // session still holds when there's a hint that one existed; the next
+    // real refresh (once back online) confirms or corrects this.
+    //
+    // No hint means either a genuinely new visitor, or - two tabs
+    // sharing localStorage - another tab already logged out and cleared
+    // it. Either way there's nothing to assume still holds, so this
+    // still resolves to anonymous rather than leaving a stale
+    // in-memory 'authenticated' state (with a now-invalid token) stuck
+    // until some unrelated request happens to retry successfully.
+    if (hasSessionHint()) {
+      setAuthenticatedOffline();
+    } else {
+      clearAccessToken();
+    }
     return false;
   }
 }

@@ -48,6 +48,14 @@ export function useSearchProducts(householdId: string, q: string) {
         `/households/${householdId}/products/search?q=${encodeURIComponent(q)}`,
       ),
     enabled: q.trim().length > 0,
+    // One distinct cache entry per keystroke, worth nothing once typing
+    // moves on - excluded from persistence (meta.persist, lib/main.tsx's
+    // shouldDehydrateQuery) and kept to the pre-RAV-19 default gcTime
+    // rather than the household-data default that lib/query-client.ts
+    // now raises to 24h, so this doesn't linger in memory or bloat the
+    // persisted localStorage blob all day.
+    gcTime: 5 * 60 * 1000,
+    meta: { persist: false },
   });
 }
 
