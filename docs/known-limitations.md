@@ -226,3 +226,37 @@ query-cost and `IN`-clause-size problem.
 denormalized/cached frequency count on `Product` (kept in sync on every
 `PurchaseHistory`/`ShoppingListItem` write) or a raw-SQL search query
 with the ranking done in the database.
+
+## Offline mutations queued while a tab is open don't survive a reload or tab close
+
+RAV-19's offline support relies on TanStack Query's built-in mutation
+pause/resume (`networkMode: 'online'`, the default): a write attempted
+while offline is paused in memory and fires automatically once the
+browser reports being back online, no custom queue code needed. That
+queue is in-memory only - closing the tab, or reloading the page, while
+a mutation is still paused loses it. The persisted query cache
+(`lib/persister.ts`) only covers *read* data (queries), not paused
+writes.
+
+**Why not fixed**: making paused mutations themselves survive a reload
+needs every mutation's `mutationFn` registered globally via
+`queryClient.setMutationDefaults(mutationKey, { mutationFn })` at app
+startup, instead of the inline closures every `useMutation` call in this
+codebase uses today (household, inventory, shopping-list, purchase-history
+- RAV-6 through RAV-20) - a mutationFn defined as a closure can't survive
+serialization to storage and back. That's a real restructuring of every
+existing mutation hook, not a "minimal" offline addition (PLAN.md's own
+wording for this issue).
+
+**Consequence to watch for**: a household member who adds an item while
+offline, then closes the browser tab (or the OS kills it) before
+reconnecting, loses that pending write silently - it never retries, and
+there's currently no "N changes couldn't be saved" recovery UI beyond the
+in-session offline banner (`components/offline-banner.tsx`), which only
+reflects mutations still alive in memory.
+
+**Resolves when**: this actually bites someone in practice (mobile
+Safari/Chrome aggressively suspend/kill backgrounded PWA tabs more than
+desktop use would suggest), at which point registering mutation defaults
+for the small, fixed set of write operations this app has is a bounded
+piece of work, not a design overhaul.
