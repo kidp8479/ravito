@@ -48,6 +48,7 @@ model Household {
   products          Product[]
   inventoryItems    InventoryItem[]
   shoppingListItems ShoppingListItem[]
+  purchaseHistory   PurchaseHistory[]
 }
 
 model HouseholdMember {
@@ -125,6 +126,7 @@ model Product {
   household         Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
   inventoryItems    InventoryItem[]
   shoppingListItems ShoppingListItem[]
+  purchaseHistory   PurchaseHistory[]
 
   @@unique([householdId, name])
 }
@@ -187,6 +189,39 @@ model ShoppingListItem {
   @@index([productId])
   @@index([checkedById])
   @@index([addedById])
+}
+
+// RECEIPT is reserved for the future receipt-import backlog item
+// (PLAN.md) - this issue's endpoint only ever writes MANUAL.
+enum PurchaseSource {
+  MANUAL
+  RECEIPT
+}
+
+// A purchase event log, not a running total (unlike InventoryItem: one
+// row per purchase, not per product). Seeds the future receipt-import
+// and price-tracking backlog items.
+model PurchaseHistory {
+  id          String         @id @default(cuid())
+  householdId String
+  productId   String?
+  // Snapshot of the product's name at purchase time - same reasoning as
+  // ShoppingListItem.rawLabel, but matters more here: a price-history log
+  // that goes blank whenever its product is renamed or removed from the
+  // catalogue defeats the point of keeping the log.
+  productName String
+  purchasedOn DateTime
+  quantity    Float
+  unit        String
+  unitPrice   Decimal?       @db.Decimal(10, 2)
+  source      PurchaseSource @default(MANUAL)
+  createdAt   DateTime       @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([householdId])
+  @@index([productId])
 }
 
 model AuditLog {

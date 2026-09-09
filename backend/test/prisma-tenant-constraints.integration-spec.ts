@@ -121,4 +121,34 @@ describe('Prisma schema tenant constraints (integration)', () => {
       prisma.auditLog.findUnique({ where: { id: log.id } }),
     ).resolves.toMatchObject({ actorUserId: user.id });
   });
+
+  it('keeps a purchase-history entry (with its unitPrice) after its product is deleted, productId set null', async () => {
+    const household = await createHousehold();
+    const product = await prisma.product.create({
+      data: { householdId: household.id, name: 'Lait' },
+    });
+    const entry = await prisma.purchaseHistory.create({
+      data: {
+        householdId: household.id,
+        productId: product.id,
+        productName: product.name,
+        purchasedOn: new Date(),
+        quantity: 2,
+        unit: 'L',
+        unitPrice: 1.5,
+      },
+    });
+
+    await prisma.product.delete({ where: { id: product.id } });
+
+    const survived = await prisma.purchaseHistory.findUnique({
+      where: { id: entry.id },
+    });
+    expect(survived?.productId).toBeNull();
+    expect(survived?.productName).toBe('Lait');
+    // Prisma's Decimal type round-trips through the pg driver as a
+    // Decimal.js instance, not a plain number - toString() is the
+    // documented way to compare it without pulling in decimal.js here.
+    expect(survived?.unitPrice?.toString()).toBe('1.5');
+  });
 });

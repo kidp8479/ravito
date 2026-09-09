@@ -78,6 +78,21 @@ interface FakeShoppingListItem {
   createdAt: Date;
 }
 
+interface FakePurchaseHistory {
+  id: string;
+  householdId: string;
+  productId: string | null;
+  productName: string;
+  purchasedOn: Date;
+  quantity: number;
+  unit: string;
+  // A string, not a number: mirrors real Prisma's Decimal type, which
+  // serializes to JSON as a string (e.g. "1.50"), not a plain number.
+  unitPrice: string | null;
+  source: 'MANUAL' | 'RECEIPT';
+  createdAt: Date;
+}
+
 function memberKey(householdId: string, userId: string): string {
   return `${householdId}:${userId}`;
 }
@@ -105,6 +120,7 @@ export function createFakePrisma() {
   const productsById = new Map<string, FakeProduct>();
   const inventoryItemsById = new Map<string, FakeInventoryItem>();
   const shoppingListItemsById = new Map<string, FakeShoppingListItem>();
+  const purchaseHistoryById = new Map<string, FakePurchaseHistory>();
 
   const client = {
     user: {
@@ -497,6 +513,14 @@ export function createFakePrisma() {
               inventoryItemsById.delete(item.id);
             }
           }
+          // Mirrors PurchaseHistory.productId onDelete: SetNull - the log
+          // entry survives (that's the whole point, see the schema
+          // comment), just loses its product link.
+          for (const entry of purchaseHistoryById.values()) {
+            if (entry.productId === product.id) {
+              entry.productId = null;
+            }
+          }
           return Promise.resolve(product);
         },
       ),
@@ -691,6 +715,63 @@ export function createFakePrisma() {
           }
           shoppingListItemsById.delete(item.id);
           return Promise.resolve(item);
+        },
+      ),
+    },
+    purchaseHistory: {
+      findMany: jest.fn(
+        ({
+          where,
+          orderBy,
+          take,
+        }: {
+          where?: { householdId?: string };
+          orderBy?: { purchasedOn?: 'asc' | 'desc' };
+          take?: number;
+        }) => {
+          let rows = [...purchaseHistoryById.values()].filter(
+            (entry) =>
+              where?.householdId === undefined ||
+              entry.householdId === where.householdId,
+          );
+          if (orderBy?.purchasedOn) {
+            rows = rows.sort((a, b) =>
+              orderBy.purchasedOn === 'desc'
+                ? b.purchasedOn.getTime() - a.purchasedOn.getTime()
+                : a.purchasedOn.getTime() - b.purchasedOn.getTime(),
+            );
+          }
+          return Promise.resolve(take ? rows.slice(0, take) : rows);
+        },
+      ),
+      create: jest.fn(
+        ({
+          data,
+        }: {
+          data: {
+            householdId: string;
+            productId: string;
+            productName: string;
+            purchasedOn: Date;
+            quantity: number;
+            unit: string;
+            unitPrice: number | null;
+          };
+        }) => {
+          const entry: FakePurchaseHistory = {
+            id: `purchase-history-${nextId++}`,
+            source: 'MANUAL',
+            createdAt: new Date(),
+            ...data,
+            // Real Prisma's Decimal type has a custom toJSON() that
+            // serializes as a string (e.g. "1.50"), not a plain number -
+            // stored as a string here too so an e2e spec asserting on
+            // the HTTP response's unitPrice exercises that same shape
+            // instead of only the real-Postgres integration tier doing so.
+            unitPrice: data.unitPrice === null ? null : String(data.unitPrice),
+          };
+          purchaseHistoryById.set(entry.id, entry);
+          return Promise.resolve(entry);
         },
       ),
     },

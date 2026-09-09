@@ -19,6 +19,7 @@ import { HouseholdsModule } from './households/households.module';
 import { ProductsModule } from './products/products.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { ShoppingListModule } from './shopping-list/shopping-list.module';
+import { PurchaseHistoryModule } from './purchase-history/purchase-history.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { ShoppingListModule } from './shopping-list/shopping-list.module';
     ProductsModule,
     InventoryModule,
     ShoppingListModule,
+    PurchaseHistoryModule,
   ],
   providers: [
     // A DI-registered global pipe (APP_PIPE), not `app.useGlobalPipes()`
