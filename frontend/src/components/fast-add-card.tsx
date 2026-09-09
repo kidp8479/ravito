@@ -11,66 +11,40 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { getErrorMessage } from '@/lib/api';
-import {
-  useCreateInventoryItem,
-  useCreateProduct,
-  useSearchProducts,
-  type Product,
-} from '@/lib/inventory';
-import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { useCreateInventoryItem, useCreateProduct } from '@/lib/inventory';
+import { useProductPicker } from '@/lib/use-product-picker';
 
 // "Search the household's product catalogue, create on the fly if absent"
 // fast-add flow (PLAN.md).
 function FastAddCard({ householdId }: { householdId: string }) {
-  const [name, setName] = useState('');
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(
-    null,
-  );
+  const picker = useProductPicker(householdId);
   const [quantity, setQuantity] = useState('1');
-  const [unit, setUnit] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // Debounced: without it, every keystroke fires its own search request
-  // against the household's product catalogue.
-  const debouncedName = useDebouncedValue(name, 250);
-  const search = useSearchProducts(
-    householdId,
-    selectedProductId ? '' : debouncedName,
-  );
   const createProduct = useCreateProduct(householdId);
   const createItem = useCreateInventoryItem(householdId);
   const pending = createProduct.isPending || createItem.isPending;
-  const suggestions =
-    !selectedProductId && name.trim() ? (search.data ?? []) : [];
-
-  function selectProduct(product: Product) {
-    setSelectedProductId(product.id);
-    setName(product.name);
-    if (product.defaultUnit) setUnit(product.defaultUnit);
-  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     try {
-      let productId = selectedProductId;
+      let productId = picker.selectedProductId;
       if (!productId) {
-        productId = (await createProduct.mutateAsync(name)).id;
+        productId = (await createProduct.mutateAsync(picker.name)).id;
         // Recorded before the next await: if createItem below fails (a
         // network blip, say), the product was still created - resubmitting
         // must reuse it via createItem alone, not call createProduct again
         // and 409 on the name it just claimed.
-        setSelectedProductId(productId);
+        picker.setSelectedProductId(productId);
       }
       await createItem.mutateAsync({
         productId,
         quantity: Number(quantity),
-        unit,
+        unit: picker.unit,
       });
-      setName('');
-      setSelectedProductId(null);
+      picker.reset();
       setQuantity('1');
-      setUnit('');
     } catch (err) {
       setError(getErrorMessage(err));
     }
@@ -92,15 +66,12 @@ function FastAddCard({ householdId }: { householdId: string }) {
               required
               maxLength={100}
               autoComplete="off"
-              value={name}
-              onChange={(event) => {
-                setSelectedProductId(null);
-                setName(event.target.value);
-              }}
+              value={picker.name}
+              onChange={(event) => picker.changeName(event.target.value)}
             />
             <ProductSuggestions
-              suggestions={suggestions}
-              onSelect={selectProduct}
+              suggestions={picker.suggestions}
+              onSelect={picker.selectProduct}
             />
           </FormField>
           <div className="flex gap-4">
@@ -120,8 +91,8 @@ function FastAddCard({ householdId }: { householdId: string }) {
                 id="fast-add-unit"
                 required
                 maxLength={20}
-                value={unit}
-                onChange={(event) => setUnit(event.target.value)}
+                value={picker.unit}
+                onChange={(event) => picker.setUnit(event.target.value)}
               />
             </FormField>
           </div>

@@ -1,6 +1,7 @@
 import {
   closestCenter,
   DndContext,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -9,6 +10,7 @@ import {
 import {
   arrayMove,
   SortableContext,
+  sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { createFileRoute, Link, redirect } from '@tanstack/react-router';
@@ -88,6 +90,9 @@ function ShoppingListContent({ householdId }: { householdId: string }) {
     useAutoAddToInventorySetting();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   const list = items.data ?? [];
@@ -102,9 +107,14 @@ function ShoppingListContent({ householdId }: { householdId: string }) {
     // Every item whose index actually shifted gets its own PATCH (no
     // sparse/fractional position scheme on the backend yet, see
     // docs/known-limitations.md): fine at household-shopping-list scale.
+    // On a failed PATCH, refetch rather than leave that one row's cached
+    // position out of sync with the rest of the list.
     arrayMove(list, oldIndex, newIndex).forEach((item, index) => {
       if (item.position !== index) {
-        reorder.mutate({ id: item.id, position: index });
+        reorder.mutate(
+          { id: item.id, position: index },
+          { onError: () => void items.refetch() },
+        );
       }
     });
   }

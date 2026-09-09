@@ -11,52 +11,32 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { getErrorMessage } from '@/lib/api';
-import { useSearchProducts, type Product } from '@/lib/inventory';
 import { useCreateShoppingListItem } from '@/lib/shopping-list';
-import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { useProductPicker } from '@/lib/use-product-picker';
 
 // Free text (rawLabel only) or a catalogue pick (rawLabel + productId) -
 // unlike FastAddCard (inventory), a free-text shopping-list item never
 // needs a Product row created for it (schema: productId is optional,
 // rawLabel always set).
 function AddShoppingListItemCard({ householdId }: { householdId: string }) {
-  const [name, setName] = useState('');
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(
-    null,
-  );
+  const picker = useProductPicker(householdId);
   const [quantity, setQuantity] = useState('1');
-  const [unit, setUnit] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const debouncedName = useDebouncedValue(name, 250);
-  const search = useSearchProducts(
-    householdId,
-    selectedProductId ? '' : debouncedName,
-  );
   const createItem = useCreateShoppingListItem(householdId);
-  const suggestions =
-    !selectedProductId && name.trim() ? (search.data ?? []) : [];
-
-  function selectProduct(product: Product) {
-    setSelectedProductId(product.id);
-    setName(product.name);
-    if (product.defaultUnit) setUnit(product.defaultUnit);
-  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     try {
       await createItem.mutateAsync({
-        productId: selectedProductId ?? undefined,
-        rawLabel: name.trim(),
+        productId: picker.selectedProductId ?? undefined,
+        rawLabel: picker.name.trim(),
         quantity: Number(quantity),
-        unit,
+        unit: picker.unit,
       });
-      setName('');
-      setSelectedProductId(null);
+      picker.reset();
       setQuantity('1');
-      setUnit('');
     } catch (err) {
       setError(getErrorMessage(err));
     }
@@ -78,15 +58,12 @@ function AddShoppingListItemCard({ householdId }: { householdId: string }) {
               required
               maxLength={100}
               autoComplete="off"
-              value={name}
-              onChange={(event) => {
-                setSelectedProductId(null);
-                setName(event.target.value);
-              }}
+              value={picker.name}
+              onChange={(event) => picker.changeName(event.target.value)}
             />
             <ProductSuggestions
-              suggestions={suggestions}
-              onSelect={selectProduct}
+              suggestions={picker.suggestions}
+              onSelect={picker.selectProduct}
             />
           </FormField>
           <div className="flex gap-4">
@@ -106,8 +83,8 @@ function AddShoppingListItemCard({ householdId }: { householdId: string }) {
                 id="shopping-list-unit"
                 required
                 maxLength={20}
-                value={unit}
-                onChange={(event) => setUnit(event.target.value)}
+                value={picker.unit}
+                onChange={(event) => picker.setUnit(event.target.value)}
               />
             </FormField>
           </div>
