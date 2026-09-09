@@ -37,13 +37,62 @@ export class ProductsService {
   }
 
   // Case-insensitive substring match on name, for the "search catalogue,
-  // create at the fly if absent" fast-add flow (PLAN.md).
-  search(householdId: string, q: string): Promise<Product[]> {
-    return householdScopedProducts(this.prisma, householdId).findMany({
+  // create at the fly if absent" fast-add flow (PLAN.md). Ranked by how
+  // often the product has actually been added (RAV-18: "you often rebuy
+  // this") - a PurchaseHistory entry or a shopping-list item both count
+  // as "added", summed. Not capped at the DB query: the top-20 has to be
+  // chosen by frequency, not alphabetically-then-cut, so every match is
+  // fetched and ranked in application code before slicing.
+  async search(householdId: string, q: string): Promise<Product[]> {
+    const products = await householdScopedProducts(
+      this.prisma,
+      householdId,
+    ).findMany({
       where: { name: { contains: q, mode: 'insensitive' } },
-      orderBy: { name: 'asc' },
-      take: 20,
     });
+    if (products.length === 0) return products;
+
+    const productIds = products.map((product) => product.id);
+    const frequency = await this.addFrequency(householdId, productIds);
+
+    return products
+      .sort((a, b) => {
+        const byFrequency =
+          (frequency.get(b.id) ?? 0) - (frequency.get(a.id) ?? 0);
+        return byFrequency !== 0 ? byFrequency : a.name.localeCompare(b.name);
+      })
+      .slice(0, 20);
+  }
+
+  // How many times each product was added: a PurchaseHistory entry, or a
+  // shopping-list item linked to it (checked or not - being put on the
+  // list at all is itself a signal, same as a purchase).
+  private async addFrequency(
+    householdId: string,
+    productIds: string[],
+  ): Promise<Map<string, number>> {
+    const [purchases, listItems] = await Promise.all([
+      this.prisma.purchaseHistory.groupBy({
+        by: ['productId'],
+        where: { householdId, productId: { in: productIds } },
+        _count: { productId: true },
+      }),
+      this.prisma.shoppingListItem.groupBy({
+        by: ['productId'],
+        where: { householdId, productId: { in: productIds } },
+        _count: { productId: true },
+      }),
+    ]);
+
+    const frequency = new Map<string, number>();
+    for (const row of [...purchases, ...listItems]) {
+      if (!row.productId) continue;
+      frequency.set(
+        row.productId,
+        (frequency.get(row.productId) ?? 0) + row._count.productId,
+      );
+    }
+    return frequency;
   }
 
   async update(

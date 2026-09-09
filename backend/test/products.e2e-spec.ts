@@ -120,6 +120,44 @@ describe('Products (e2e)', () => {
     expect(results[0].name).toBe('Lait demi-ecreme');
   });
 
+  it('ranks search results by how often each product was added, not alphabetically', async () => {
+    const { owner, household } = await setup();
+    await request(server)
+      .post(`/households/${household.id}/products`)
+      .set(...auth(owner.accessToken))
+      .send({ name: 'Pomme rouge' })
+      .expect(201);
+    const poireRes = await request(server)
+      .post(`/households/${household.id}/products`)
+      .set(...auth(owner.accessToken))
+      .send({ name: 'Poire' })
+      .expect(201);
+    const poire = poireRes.body as ProductBody;
+
+    // Poire added to the shopping list twice, Pomme never - despite
+    // sorting after "Pomme" alphabetically, it should rank first.
+    for (let i = 0; i < 2; i++) {
+      await request(server)
+        .post(`/households/${household.id}/shopping-list`)
+        .set(...auth(owner.accessToken))
+        .send({
+          productId: poire.id,
+          rawLabel: poire.name,
+          quantity: 1,
+          unit: 'pcs',
+        })
+        .expect(201);
+    }
+
+    const res = await request(server)
+      .get(`/households/${household.id}/products/search`)
+      .query({ q: 'po' })
+      .set(...auth(owner.accessToken))
+      .expect(200);
+    const results = res.body as ProductBody[];
+    expect(results.map((p) => p.name)).toEqual(['Poire', 'Pomme rouge']);
+  });
+
   it('updates a product, 404s on an unknown id, 409s on a name clash', async () => {
     const { owner, household } = await setup();
     const createRes = await request(server)

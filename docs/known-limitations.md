@@ -196,3 +196,33 @@ real, valid position and the final order is always right.
 **Resolves when**: the list sizes people actually hit make this worth a
 backend migration to sparse positions, or the backend gains a dedicated
 bulk-reorder endpoint.
+
+## Product search fetches every match before ranking, no DB-level cap
+
+`ProductsService.search()` (`backend/src/products/products.service.ts`,
+RAV-18) dropped the `take: 20` it used to pass to `findMany` when it
+started ranking by add frequency instead of sorting alphabetically at
+the DB level. Every catalogue row matching the name filter is now
+fetched on each debounced search keystroke, plus two `groupBy` queries
+(`PurchaseHistory`, `ShoppingListItem`) scoped with an `IN` clause over
+every matched product id, before the top 20 are picked in application
+code.
+
+**Why not fixed**: ranking has to happen before the cut, not after -
+capping at the DB level first would alphabetically exclude a
+frequently-bought product before its frequency was ever looked at. A
+correct DB-level version needs either a raw SQL query with a `COUNT`
+join (this codebase is Prisma-ORM-only, no raw SQL anywhere) or a
+materialized/cached frequency column updated on write - more machinery
+than a Low-priority autocomplete polish item justified.
+
+**Consequence to watch for**: a household catalogue is expected to stay
+in the tens-to-low-hundreds of products; at that scale this is an
+unmeasurable cost per keystroke. If catalogues ever grow past that (bulk
+import, a "browse all brands" feature), this becomes a real per-keystroke
+query-cost and `IN`-clause-size problem.
+
+**Resolves when**: catalogue sizes actually observed justify either a
+denormalized/cached frequency count on `Product` (kept in sync on every
+`PurchaseHistory`/`ShoppingListItem` write) or a raw-SQL search query
+with the ranking done in the database.

@@ -17,6 +17,8 @@ describe('ProductsService', () => {
       update: jest.Mock;
       delete: jest.Mock;
     };
+    purchaseHistory: { groupBy: jest.Mock };
+    shoppingListItem: { groupBy: jest.Mock };
   };
 
   beforeEach(async () => {
@@ -28,6 +30,8 @@ describe('ProductsService', () => {
         update: jest.fn(),
         delete: jest.fn(),
       },
+      purchaseHistory: { groupBy: jest.fn().mockResolvedValue([]) },
+      shoppingListItem: { groupBy: jest.fn().mockResolvedValue([]) },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -100,9 +104,71 @@ describe('ProductsService', () => {
           name: { contains: 'lait', mode: 'insensitive' },
           householdId: 'h1',
         },
-        orderBy: { name: 'asc' },
-        take: 20,
       });
+    });
+
+    it('does not query frequency at all when nothing matched', async () => {
+      prisma.product.findMany.mockResolvedValue([]);
+
+      await service.search('h1', 'xyz');
+
+      expect(prisma.purchaseHistory.groupBy).not.toHaveBeenCalled();
+      expect(prisma.shoppingListItem.groupBy).not.toHaveBeenCalled();
+    });
+
+    it('ranks by combined purchase + shopping-list add frequency, most first', async () => {
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'p1', name: 'Lait' },
+        { id: 'p2', name: 'Pain' },
+        { id: 'p3', name: 'Riz' },
+      ]);
+      prisma.purchaseHistory.groupBy.mockResolvedValue([
+        { productId: 'p1', _count: { productId: 3 } },
+        { productId: 'p3', _count: { productId: 1 } },
+      ]);
+      prisma.shoppingListItem.groupBy.mockResolvedValue([
+        { productId: 'p2', _count: { productId: 5 } },
+        { productId: 'p1', _count: { productId: 1 } },
+      ]);
+
+      const result = await service.search('h1', 'a');
+
+      // p1: 3 + 1 = 4, p2: 0 + 5 = 5, p3: 1 + 0 = 1
+      expect(result.map((p) => p.id)).toEqual(['p2', 'p1', 'p3']);
+      expect(prisma.purchaseHistory.groupBy).toHaveBeenCalledWith({
+        by: ['productId'],
+        where: { householdId: 'h1', productId: { in: ['p1', 'p2', 'p3'] } },
+        _count: { productId: true },
+      });
+    });
+
+    it('falls back to alphabetical order when frequencies tie', async () => {
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'p2', name: 'Riz' },
+        { id: 'p1', name: 'Lait' },
+      ]);
+
+      const result = await service.search('h1', 'a');
+
+      expect(result.map((p) => p.name)).toEqual(['Lait', 'Riz']);
+    });
+
+    it('caps results at 20 after ranking, not before', async () => {
+      const products = Array.from({ length: 25 }, (_, i) => ({
+        id: `p${i}`,
+        name: `Product ${i}`,
+      }));
+      prisma.product.findMany.mockResolvedValue(products);
+      // The 25th product (alphabetically last) is by far the most
+      // frequently added - it must still make the top 20.
+      prisma.purchaseHistory.groupBy.mockResolvedValue([
+        { productId: 'p24', _count: { productId: 100 } },
+      ]);
+
+      const result = await service.search('h1', 'product');
+
+      expect(result).toHaveLength(20);
+      expect(result[0].id).toBe('p24');
     });
   });
 });
