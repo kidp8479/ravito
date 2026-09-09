@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Product } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 // Thin per-model wrappers around PrismaService that make `householdId` a
@@ -68,22 +68,25 @@ export function householdScopedProducts(
 
 // A foreign key into Product only guarantees the referenced product
 // exists *somewhere* - not that it belongs to this household. Without
-// this check, InventoryItem/ShoppingListItem creation would let
-// household A point a row at household B's product: an invisible
-// cross-tenant reference this module exists specifically to prevent.
-// Reuses householdScopedProducts' own findUnique rather than
-// re-deriving the same scoped lookup per caller.
+// this check, InventoryItem/ShoppingListItem/PurchaseHistory creation
+// would let household A point a row at household B's product: an
+// invisible cross-tenant reference this module exists specifically to
+// prevent. Reuses householdScopedProducts' own findUnique rather than
+// re-deriving the same scoped lookup per caller. Returns the product (not
+// just void) so a caller that also needs one of its fields - PurchaseHistory
+// snapshotting the name, say - doesn't have to look it up a second time.
 async function assertProductInHousehold(
   prisma: PrismaService,
   householdId: string,
   productId: string,
-): Promise<void> {
+): Promise<Product> {
   const product = await householdScopedProducts(prisma, householdId).findUnique(
     productId,
   );
   if (!product) {
     throw new NotFoundException('Product not found');
   }
+  return product;
 }
 
 export function householdScopedInventoryItems(
@@ -205,6 +208,40 @@ export function householdScopedShoppingListItems(
     },
     delete(id: string) {
       return prisma.shoppingListItem.delete({ where: { id, householdId } });
+    },
+  };
+}
+
+export function householdScopedPurchaseHistory(
+  prisma: PrismaService,
+  householdId: string,
+) {
+  return {
+    findMany<T extends Omit<Prisma.PurchaseHistoryFindManyArgs, 'where'>>(
+      args: T & { where?: Prisma.PurchaseHistoryWhereInput } = {} as T,
+    ): Prisma.PrismaPromise<Prisma.PurchaseHistoryGetPayload<T>[]> {
+      return prisma.purchaseHistory.findMany({
+        ...args,
+        where: { ...args.where, householdId },
+      }) as Prisma.PrismaPromise<Prisma.PurchaseHistoryGetPayload<T>[]>;
+    },
+    // productName isn't a caller-supplied field: it's a snapshot of the
+    // product's current name, taken here from the same lookup that
+    // already verifies the product belongs to this household.
+    async create(
+      data: Omit<
+        Prisma.PurchaseHistoryUncheckedCreateInput,
+        'householdId' | 'productName' | 'source' | 'productId'
+      > & { productId: string },
+    ) {
+      const product = await assertProductInHousehold(
+        prisma,
+        householdId,
+        data.productId,
+      );
+      return prisma.purchaseHistory.create({
+        data: { ...data, householdId, productName: product.name },
+      });
     },
   };
 }
