@@ -65,5 +65,10 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Local overrides (Vite convention)
 *.local
 
+# Personal docker-compose port remaps etc. - machine-specific, not a
+# project-wide decision (docker/podman compose picks this up automatically
+# alongside docker-compose.yml, no -f flag needed).
+docker-compose.override.yml
+
 # TODO (per project): add project-specific data dirs, e.g. downloaded
 # media, generated assets that shouldn't be versioned.
