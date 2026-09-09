@@ -1,5 +1,6 @@
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, redirect } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
+import { AppHeader } from '@/components/app-header';
 import { FormError, FormField } from '@/components/form';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,7 +12,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { useLogout, useMe } from '@/lib/auth';
+import { useMe } from '@/lib/auth';
 import { getAuthState } from '@/lib/auth-store';
 import { ensureAuthLoaded, getErrorMessage } from '@/lib/api';
 import {
@@ -19,7 +20,7 @@ import {
   useCreateInvite,
   useHouseholdMembers,
   useJoinHousehold,
-  useMyHouseholds,
+  useMyHousehold,
   useRemoveMember,
   type HouseholdInvite,
   type HouseholdMember,
@@ -37,49 +38,30 @@ export const Route = createFileRoute('/household')({
 });
 
 function HouseholdPage() {
-  const navigate = useNavigate();
-  const me = useMe();
-  const logout = useLogout();
-  const households = useMyHouseholds();
+  const household = useMyHousehold();
 
   return (
     <main className="mx-auto flex min-h-svh max-w-lg flex-col gap-6 p-8">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Ravito</h1>
-          {me.data && (
-            <p className="text-muted-foreground text-sm">
-              Signed in as {me.data.displayName}
-            </p>
-          )}
-        </div>
-        <Button
-          variant="outline"
-          onClick={() =>
-            logout.mutate(undefined, {
-              onSuccess: () => void navigate({ to: '/login' }),
-            })
-          }
-          disabled={logout.isPending}
-        >
-          Log out
-        </Button>
-      </header>
+      <AppHeader>
+        {household.data && (
+          <Button asChild variant="ghost">
+            <Link to="/inventory">Inventory</Link>
+          </Button>
+        )}
+      </AppHeader>
 
-      {households.isLoading && (
+      {household.isLoading && (
         <p className="text-muted-foreground text-sm">
           Loading your household...
         </p>
       )}
-      {households.isSuccess && households.data.length === 0 && (
+      {household.isSuccess && !household.data && (
         <div className="flex flex-col gap-6">
           <CreateHouseholdCard />
           <JoinHouseholdCard />
         </div>
       )}
-      {households.isSuccess && households.data.length > 0 && (
-        <HouseholdDetails household={households.data[0]} />
-      )}
+      {household.data && <HouseholdDetails household={household.data} />}
     </main>
   );
 }

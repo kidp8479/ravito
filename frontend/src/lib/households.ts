@@ -39,6 +39,18 @@ export function useMyHouseholds() {
   });
 }
 
+// v1 shows only the caller's first household (docs/known-limitations.md
+// > "The household screen only shows the caller's first household") -
+// shared here so every screen that needs "the current household" makes
+// the same assumption instead of re-deriving it.
+export function useMyHousehold() {
+  const households = useMyHouseholds();
+  return {
+    ...households,
+    data: households.data?.[0],
+  };
+}
+
 export function useHouseholdMembers(householdId: string) {
   const auth = useAuthState();
   return useQuery({
