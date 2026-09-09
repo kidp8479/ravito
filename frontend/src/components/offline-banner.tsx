@@ -1,24 +1,26 @@
 import { useMutationState } from '@tanstack/react-query';
 import { useOnlineStatus } from '@/lib/use-online-status';
 
-// "N pending" also counts mutations still actually in flight, not just
-// ones TanStack Query has paused for being offline - status stays
-// 'pending' either way, and telling them apart isn't worth the extra
-// state for a banner this minimal (RAV-19, PLAN.md's "minimal offline
-// support").
 function usePendingMutationCount(): number {
   return useMutationState({ filters: { status: 'pending' } }).length;
 }
 
+// Offline-only, deliberately: while online, "pending" also includes
+// perfectly normal, fast, fully-online mutations (a query is briefly
+// 'pending' for the duration of any in-flight request) - a "Syncing..."
+// banner reacting to those would flash on essentially every routine
+// write, not just ones actually held up by connectivity. Once back
+// online, paused mutations flush within one round trip; not worth a
+// separate "reconnecting" phase for a banner this minimal (RAV-19,
+// PLAN.md's "minimal offline support").
 function OfflineBanner() {
   const isOnline = useOnlineStatus();
   const pending = usePendingMutationCount();
 
-  if (isOnline && pending === 0) return null;
+  if (isOnline) return null;
 
-  const message = isOnline
-    ? `Syncing ${pending} change${pending > 1 ? 's' : ''}...`
-    : pending > 0
+  const message =
+    pending > 0
       ? `You're offline - ${pending} change${pending > 1 ? 's' : ''} will sync once you're back online`
       : "You're offline";
 

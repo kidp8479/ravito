@@ -44,7 +44,16 @@ createRoot(document.getElementById('root')!).render(
         // localStorage in plaintext would be a real credential leak for
         // no benefit whatsoever. Excluded unconditionally, not just for
         // auth mutations, since none of them can resume from storage.
-        dehydrateOptions: { shouldDehydrateMutation: () => false },
+        dehydrateOptions: {
+          shouldDehydrateMutation: () => false,
+          // Same as the library's own default (persist any successful
+          // query), plus an explicit per-query opt-out via
+          // meta.persist: false - lib/inventory.ts's useSearchProducts
+          // uses it so its one-cache-entry-per-keystroke results don't
+          // bloat the persisted blob for a whole day.
+          shouldDehydrateQuery: (query) =>
+            query.state.status === 'success' && query.meta?.persist !== false,
+        },
       }}
     >
       <RouterProvider router={router} />

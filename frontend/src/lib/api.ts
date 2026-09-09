@@ -78,8 +78,17 @@ async function doRefresh(): Promise<boolean> {
     // whole point (cached data should still render). Assume the existing
     // session still holds when there's a hint that one existed; the next
     // real refresh (once back online) confirms or corrects this.
+    //
+    // No hint means either a genuinely new visitor, or - two tabs
+    // sharing localStorage - another tab already logged out and cleared
+    // it. Either way there's nothing to assume still holds, so this
+    // still resolves to anonymous rather than leaving a stale
+    // in-memory 'authenticated' state (with a now-invalid token) stuck
+    // until some unrelated request happens to retry successfully.
     if (hasSessionHint()) {
       setAuthenticatedOffline();
+    } else {
+      clearAccessToken();
     }
     return false;
   }

@@ -161,14 +161,14 @@ describe('refreshAccessToken', () => {
     expect(authStore.hasSessionHint()).toBe(true);
   });
 
-  it('does not assume authenticated on a network error with no session hint', async () => {
+  it('clears the session on a network error with no session hint (e.g. another tab already logged out)', async () => {
     const { api, authStore, fetchMock } = await freshApi();
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
 
     const result = await api.refreshAccessToken();
 
     expect(result).toBe(false);
-    expect(authStore.getAuthState()).toEqual({ status: 'loading' });
+    expect(authStore.getAuthState()).toEqual({ status: 'anonymous' });
   });
 });
 

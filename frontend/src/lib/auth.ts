@@ -7,6 +7,7 @@ import {
   setAccessToken,
   subscribeAuth,
 } from './auth-store';
+import { clearPersistedCache } from './persister';
 
 export interface User {
   id: string;
@@ -76,6 +77,9 @@ export function useLogout() {
     onSettled: () => {
       clearAccessToken();
       queryClient.clear();
+      // Not left to queryClient.clear()'s reactive, throttled persist -
+      // see persister.ts's clearPersistedCache() for why.
+      clearPersistedCache();
     },
   });
 }
