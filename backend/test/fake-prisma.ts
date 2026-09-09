@@ -78,6 +78,19 @@ interface FakeShoppingListItem {
   createdAt: Date;
 }
 
+interface FakePurchaseHistory {
+  id: string;
+  householdId: string;
+  productId: string | null;
+  productName: string;
+  purchasedOn: Date;
+  quantity: number;
+  unit: string;
+  unitPrice: number | null;
+  source: 'MANUAL' | 'RECEIPT';
+  createdAt: Date;
+}
+
 function memberKey(householdId: string, userId: string): string {
   return `${householdId}:${userId}`;
 }
@@ -105,6 +118,7 @@ export function createFakePrisma() {
   const productsById = new Map<string, FakeProduct>();
   const inventoryItemsById = new Map<string, FakeInventoryItem>();
   const shoppingListItemsById = new Map<string, FakeShoppingListItem>();
+  const purchaseHistoryById = new Map<string, FakePurchaseHistory>();
 
   const client = {
     user: {
@@ -497,6 +511,14 @@ export function createFakePrisma() {
               inventoryItemsById.delete(item.id);
             }
           }
+          // Mirrors PurchaseHistory.productId onDelete: SetNull - the log
+          // entry survives (that's the whole point, see the schema
+          // comment), just loses its product link.
+          for (const entry of purchaseHistoryById.values()) {
+            if (entry.productId === product.id) {
+              entry.productId = null;
+            }
+          }
           return Promise.resolve(product);
         },
       ),
@@ -691,6 +713,55 @@ export function createFakePrisma() {
           }
           shoppingListItemsById.delete(item.id);
           return Promise.resolve(item);
+        },
+      ),
+    },
+    purchaseHistory: {
+      findMany: jest.fn(
+        ({
+          where,
+          orderBy,
+        }: {
+          where?: { householdId?: string };
+          orderBy?: { purchasedOn?: 'asc' | 'desc' };
+        }) => {
+          let rows = [...purchaseHistoryById.values()].filter(
+            (entry) =>
+              where?.householdId === undefined ||
+              entry.householdId === where.householdId,
+          );
+          if (orderBy?.purchasedOn) {
+            rows = rows.sort((a, b) =>
+              orderBy.purchasedOn === 'desc'
+                ? b.purchasedOn.getTime() - a.purchasedOn.getTime()
+                : a.purchasedOn.getTime() - b.purchasedOn.getTime(),
+            );
+          }
+          return Promise.resolve(rows);
+        },
+      ),
+      create: jest.fn(
+        ({
+          data,
+        }: {
+          data: {
+            householdId: string;
+            productId: string;
+            productName: string;
+            purchasedOn: Date;
+            quantity: number;
+            unit: string;
+            unitPrice: number | null;
+          };
+        }) => {
+          const entry: FakePurchaseHistory = {
+            id: `purchase-history-${nextId++}`,
+            source: 'MANUAL',
+            createdAt: new Date(),
+            ...data,
+          };
+          purchaseHistoryById.set(entry.id, entry);
+          return Promise.resolve(entry);
         },
       ),
     },
