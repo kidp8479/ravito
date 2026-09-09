@@ -1,4 +1,4 @@
-import { createFileRoute, Link, redirect } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { AppHeader } from '@/components/app-header';
 import { FormError, FormField } from '@/components/form';
@@ -42,18 +42,7 @@ function HouseholdPage() {
 
   return (
     <main className="mx-auto flex min-h-svh max-w-lg flex-col gap-6 p-8">
-      <AppHeader>
-        {household.data && (
-          <>
-            <Button asChild variant="ghost">
-              <Link to="/inventory">Inventory</Link>
-            </Button>
-            <Button asChild variant="ghost">
-              <Link to="/shopping-list">Shopping list</Link>
-            </Button>
-          </>
-        )}
-      </AppHeader>
+      <AppHeader />
 
       {household.isLoading && (
         <p className="text-muted-foreground text-sm">
