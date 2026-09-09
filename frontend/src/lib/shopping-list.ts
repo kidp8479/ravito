@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { API_URL, apiFetch } from './api';
+import { API_URL, apiFetch, refreshAccessToken } from './api';
 import { useAuthState } from './auth';
 
 export interface ShoppingListItem {
@@ -44,8 +44,11 @@ export function useCreateShoppingListItem(householdId: string) {
         method: 'POST',
         body: input,
       }),
-    onSuccess: () =>
-      void queryClient.invalidateQueries({ queryKey: listKey(householdId) }),
+    onSuccess: (item) =>
+      queryClient.setQueryData(
+        listKey(householdId),
+        (old?: ShoppingListItem[]) => upsert(old, item),
+      ),
   });
 }
 
@@ -66,8 +69,11 @@ export function useUpdateShoppingListItem(householdId: string) {
         `/households/${householdId}/shopping-list/${id}`,
         { method: 'PATCH', body: input },
       ),
-    onSuccess: () =>
-      void queryClient.invalidateQueries({ queryKey: listKey(householdId) }),
+    onSuccess: (item) =>
+      queryClient.setQueryData(
+        listKey(householdId),
+        (old?: ShoppingListItem[]) => upsert(old, item),
+      ),
   });
 }
 
@@ -79,8 +85,11 @@ export function useCheckShoppingListItem(householdId: string) {
         `/households/${householdId}/shopping-list/${id}/check`,
         { method: 'PATCH', body: { checked } },
       ),
-    onSuccess: () =>
-      void queryClient.invalidateQueries({ queryKey: listKey(householdId) }),
+    onSuccess: (item) =>
+      queryClient.setQueryData(
+        listKey(householdId),
+        (old?: ShoppingListItem[]) => upsert(old, item),
+      ),
   });
 }
 
@@ -91,19 +100,27 @@ export function useDeleteShoppingListItem(householdId: string) {
       apiFetch<void>(`/households/${householdId}/shopping-list/${id}`, {
         method: 'DELETE',
       }),
-    onSuccess: () =>
-      void queryClient.invalidateQueries({ queryKey: listKey(householdId) }),
+    onSuccess: (_data, id) =>
+      queryClient.setQueryData(
+        listKey(householdId),
+        (old?: ShoppingListItem[]) => removeById(old, id),
+      ),
   });
 }
 
+// Sorted by position on every write: both the REST mutations above and the
+// socket handlers below funnel through this, so a member reordering the
+// list (position is a patchable field) keeps everyone's cache in the same
+// order without a full refetch.
 function upsert(
   items: ShoppingListItem[] | undefined,
   item: ShoppingListItem,
 ): ShoppingListItem[] {
   const existing = items ?? [];
-  return existing.some((i) => i.id === item.id)
+  const next = existing.some((i) => i.id === item.id)
     ? existing.map((i) => (i.id === item.id ? item : i))
     : [...existing, item];
+  return [...next].sort((a, b) => a.position - b.position);
 }
 
 function removeById(
@@ -149,6 +166,19 @@ export function useShoppingListRealtime(householdId: string | undefined) {
         listKey(householdId),
         (old?: ShoppingListItem[]) => removeById(old, id),
       );
+    });
+
+    // The gateway rejects the handshake (client.disconnect(true)) when the
+    // token fails verification - socket.io-client does not auto-reconnect
+    // after a server-initiated disconnect. Refreshing nudges the auth
+    // store to a new token, which re-runs this effect with fresh auth;
+    // clearAccessToken() (already called inside a failed refresh) leaves
+    // accessToken null and this effect simply stays disconnected instead
+    // of retrying forever.
+    socket.on('disconnect', (reason) => {
+      if (reason === 'io server disconnect') {
+        void refreshAccessToken();
+      }
     });
 
     return () => {

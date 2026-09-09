@@ -35,6 +35,33 @@ request is in flight).
 treatment planned for the shopping list in Lot 3 - add the atomic
 increment endpoint then.
 
+## The shopping-list realtime socket reconnects fully on every access-token refresh
+
+`useShoppingListRealtime` (`frontend/src/lib/shopping-list.ts`, RAV-14)
+tears down and recreates the `socket.io-client` connection whenever the
+access token changes, rather than updating the existing socket's `auth`
+in place and calling `socket.connect()`. Every silent token refresh
+(`api.ts`'s `refreshAccessToken`, on any REST 401) while the user has the
+shopping list open causes a brief realtime disconnect/reconnect blip
+instead of a seamless in-place re-auth.
+
+**Why not fixed**: `socket.auth` can be updated on the existing `Socket`
+instance without discarding it, but Socket.IO still performs a full
+transport-level reconnect handshake either way (auth is only re-sent on
+(re)connection), so the blip is not actually eliminated by that change,
+only the client-side object churn. Given the access token's 15 min TTL,
+this fires rarely per session; not worth the added complexity right now.
+
+**Consequence to watch for**: a user actively watching the shopping list
+for an extended session can see a sub-second gap in realtime delivery
+around each token refresh. A REST mutation made by someone else during
+that gap is still recovered the moment the new socket reconnects and
+requests the room again on the next relevant event, or on next fetch.
+
+**Resolves when**: this becomes a real nuisance (e.g. shorter access
+token TTLs) or the realtime layer grows a resume/replay mechanism worth
+building for other reasons too.
+
 ## The household screen only shows the caller's first household
 
 `HouseholdPage` (`frontend/src/routes/household.tsx`, RAV-8) renders only
