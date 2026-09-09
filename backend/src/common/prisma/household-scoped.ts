@@ -66,28 +66,30 @@ export function householdScopedProducts(
   };
 }
 
+// A foreign key into Product only guarantees the referenced product
+// exists *somewhere* - not that it belongs to this household. Without
+// this check, InventoryItem/ShoppingListItem creation would let
+// household A point a row at household B's product: an invisible
+// cross-tenant reference this module exists specifically to prevent.
+// Reuses householdScopedProducts' own findUnique rather than
+// re-deriving the same scoped lookup per caller.
+async function assertProductInHousehold(
+  prisma: PrismaService,
+  householdId: string,
+  productId: string,
+): Promise<void> {
+  const product = await householdScopedProducts(prisma, householdId).findUnique(
+    productId,
+  );
+  if (!product) {
+    throw new NotFoundException('Product not found');
+  }
+}
+
 export function householdScopedInventoryItems(
   prisma: PrismaService,
   householdId: string,
 ) {
-  // InventoryItem.productId is a foreign key into Product, but the FK
-  // constraint alone only guarantees the referenced product exists
-  // *somewhere* - not that it belongs to this household. Without this
-  // check, create() would let household A create an InventoryItem that
-  // points at household B's product: an invisible cross-tenant reference
-  // this module exists specifically to prevent. Reuses
-  // householdScopedProducts' own findUnique rather than re-deriving the
-  // same scoped lookup here.
-  async function assertProductInHousehold(productId: string): Promise<void> {
-    const product = await householdScopedProducts(
-      prisma,
-      householdId,
-    ).findUnique(productId);
-    if (!product) {
-      throw new NotFoundException('Product not found');
-    }
-  }
-
   return {
     findMany<T extends Omit<Prisma.InventoryItemFindManyArgs, 'where'>>(
       args: T & { where?: Prisma.InventoryItemWhereInput } = {} as T,
@@ -109,7 +111,7 @@ export function householdScopedInventoryItems(
     async create(
       data: Omit<Prisma.InventoryItemUncheckedCreateInput, 'householdId'>,
     ) {
-      await assertProductInHousehold(data.productId);
+      await assertProductInHousehold(prisma, householdId, data.productId);
       return prisma.inventoryItem.create({ data: { ...data, householdId } });
     },
     // productId is excluded here, not just householdId/id: an inventory
@@ -130,6 +132,79 @@ export function householdScopedInventoryItems(
     },
     delete(id: string) {
       return prisma.inventoryItem.delete({ where: { id, householdId } });
+    },
+  };
+}
+
+export function householdScopedShoppingListItems(
+  prisma: PrismaService,
+  householdId: string,
+) {
+  return {
+    findMany<T extends Omit<Prisma.ShoppingListItemFindManyArgs, 'where'>>(
+      args: T & { where?: Prisma.ShoppingListItemWhereInput } = {} as T,
+    ): Prisma.PrismaPromise<Prisma.ShoppingListItemGetPayload<T>[]> {
+      return prisma.shoppingListItem.findMany({
+        ...args,
+        where: { ...args.where, householdId },
+      }) as Prisma.PrismaPromise<Prisma.ShoppingListItemGetPayload<T>[]>;
+    },
+    count(
+      args: Omit<Prisma.ShoppingListItemCountArgs, 'where'> & {
+        where?: Prisma.ShoppingListItemWhereInput;
+      } = {},
+    ) {
+      return prisma.shoppingListItem.count({
+        ...args,
+        where: { ...args.where, householdId },
+      });
+    },
+    findUnique(id: string) {
+      return prisma.shoppingListItem.findUnique({ where: { id, householdId } });
+    },
+    async create(
+      data: Omit<
+        Prisma.ShoppingListItemUncheckedCreateInput,
+        'householdId' | 'checked' | 'checkedById'
+      >,
+    ) {
+      if (data.productId) {
+        await assertProductInHousehold(prisma, householdId, data.productId);
+      }
+      return prisma.shoppingListItem.create({
+        data: { ...data, householdId },
+      });
+    },
+    // checked/checkedById are excluded here, same reasoning as
+    // InventoryItem's update excluding productId: checking an item is a
+    // distinct action (setChecked below), not a field a general edit
+    // should be able to flip as a side effect.
+    update(
+      id: string,
+      data: Omit<
+        Prisma.ShoppingListItemUncheckedUpdateInput,
+        | 'id'
+        | 'householdId'
+        | 'productId'
+        | 'checked'
+        | 'checkedById'
+        | 'addedById'
+        | 'createdAt'
+      >,
+    ) {
+      return prisma.shoppingListItem.update({
+        where: { id, householdId },
+        data,
+      });
+    },
+    setChecked(id: string, checked: boolean, checkedById: string | null) {
+      return prisma.shoppingListItem.update({
+        where: { id, householdId },
+        data: { checked, checkedById },
+      });
+    },
+    delete(id: string) {
+      return prisma.shoppingListItem.delete({ where: { id, householdId } });
     },
   };
 }

@@ -1,6 +1,7 @@
 import {
   householdScopedInventoryItems,
   householdScopedProducts,
+  householdScopedShoppingListItems,
 } from './../src/common/prisma/household-scoped';
 import { useIntegrationPrisma } from './integration-prisma';
 
@@ -109,5 +110,55 @@ describe('household-scoped Prisma helpers (integration)', () => {
         unit: 'L',
       }),
     ).rejects.toThrow();
+  });
+
+  it("a shopping list item from household B is invisible through household A's scope", async () => {
+    const householdA = await createHousehold();
+    const householdB = await createHousehold();
+    const itemB = await householdScopedShoppingListItems(
+      prisma,
+      householdB.id,
+    ).create({ rawLabel: 'Lait', quantity: 1, unit: 'L', position: 0 });
+
+    await expect(
+      householdScopedShoppingListItems(prisma, householdA.id).findUnique(
+        itemB.id,
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      householdScopedShoppingListItems(prisma, householdB.id).findUnique(
+        itemB.id,
+      ),
+    ).resolves.toMatchObject({ id: itemB.id });
+  });
+
+  it("rejects creating a shopping list item against another household's product", async () => {
+    const householdA = await createHousehold();
+    const householdB = await createHousehold();
+    const productB = await householdScopedProducts(
+      prisma,
+      householdB.id,
+    ).create({ name: 'Lait' });
+
+    await expect(
+      householdScopedShoppingListItems(prisma, householdA.id).create({
+        productId: productB.id,
+        rawLabel: 'Lait',
+        quantity: 1,
+        unit: 'L',
+        position: 0,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('allows a shopping list item with no productId (free text)', async () => {
+    const household = await createHousehold();
+
+    const item = await householdScopedShoppingListItems(
+      prisma,
+      household.id,
+    ).create({ rawLabel: 'Baguette', quantity: 1, unit: 'pcs', position: 0 });
+
+    expect(item.productId).toBeNull();
   });
 });

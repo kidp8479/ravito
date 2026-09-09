@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import {
   householdScopedInventoryItems,
   householdScopedProducts,
+  householdScopedShoppingListItems,
 } from './household-scoped';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -20,6 +21,14 @@ function fakePrisma() {
     },
     inventoryItem: {
       findMany: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
+    shoppingListItem: {
+      findMany: jest.fn(),
+      count: jest.fn(),
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -137,6 +146,105 @@ describe('householdScopedInventoryItems', () => {
 
     void scoped.delete('i1');
     expect(mocks.inventoryItem.delete).toHaveBeenCalledWith({
+      where: { id: 'i1', householdId: 'h1' },
+    });
+  });
+});
+
+describe('householdScopedShoppingListItems', () => {
+  it('merges householdId into findMany and count', () => {
+    const mocks = fakePrisma();
+    const scoped = householdScopedShoppingListItems(asPrisma(mocks), 'h1');
+
+    void scoped.findMany({ orderBy: { position: 'asc' } });
+    expect(mocks.shoppingListItem.findMany).toHaveBeenCalledWith({
+      orderBy: { position: 'asc' },
+      where: { householdId: 'h1' },
+    });
+
+    void scoped.count();
+    expect(mocks.shoppingListItem.count).toHaveBeenCalledWith({
+      where: { householdId: 'h1' },
+    });
+  });
+
+  it('creates a free-text item (no productId) without checking any product', async () => {
+    const mocks = fakePrisma();
+    await householdScopedShoppingListItems(asPrisma(mocks), 'h1').create({
+      rawLabel: 'Baguette',
+      quantity: 2,
+      unit: 'pcs',
+      addedById: 'u1',
+      position: 0,
+    });
+
+    expect(mocks.product.findUnique).not.toHaveBeenCalled();
+    expect(mocks.shoppingListItem.create).toHaveBeenCalledWith({
+      data: {
+        rawLabel: 'Baguette',
+        quantity: 2,
+        unit: 'pcs',
+        addedById: 'u1',
+        position: 0,
+        householdId: 'h1',
+      },
+    });
+  });
+
+  it('creates a catalogue-linked item after confirming the product is in this household', async () => {
+    const mocks = fakePrisma();
+    mocks.product.findUnique.mockResolvedValue({ id: 'p1', householdId: 'h1' });
+
+    await householdScopedShoppingListItems(asPrisma(mocks), 'h1').create({
+      productId: 'p1',
+      rawLabel: 'Lait',
+      quantity: 1,
+      unit: 'L',
+      addedById: 'u1',
+      position: 0,
+    });
+
+    expect(mocks.product.findUnique).toHaveBeenCalledWith({
+      where: { id: 'p1', householdId: 'h1' },
+    });
+    expect(mocks.shoppingListItem.create).toHaveBeenCalled();
+  });
+
+  it("rejects create when the linked product isn't in this household", async () => {
+    const mocks = fakePrisma();
+    mocks.product.findUnique.mockResolvedValue(null);
+
+    await expect(
+      householdScopedShoppingListItems(asPrisma(mocks), 'h1').create({
+        productId: 'other-households-product',
+        rawLabel: 'Lait',
+        quantity: 1,
+        unit: 'L',
+        addedById: 'u1',
+        position: 0,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(mocks.shoppingListItem.create).not.toHaveBeenCalled();
+  });
+
+  it('scopes update, setChecked and delete by id and householdId', () => {
+    const mocks = fakePrisma();
+    const scoped = householdScopedShoppingListItems(asPrisma(mocks), 'h1');
+
+    void scoped.update('i1', { quantity: 3 });
+    expect(mocks.shoppingListItem.update).toHaveBeenCalledWith({
+      where: { id: 'i1', householdId: 'h1' },
+      data: { quantity: 3 },
+    });
+
+    void scoped.setChecked('i1', true, 'u1');
+    expect(mocks.shoppingListItem.update).toHaveBeenCalledWith({
+      where: { id: 'i1', householdId: 'h1' },
+      data: { checked: true, checkedById: 'u1' },
+    });
+
+    void scoped.delete('i1');
+    expect(mocks.shoppingListItem.delete).toHaveBeenCalledWith({
       where: { id: 'i1', householdId: 'h1' },
     });
   });

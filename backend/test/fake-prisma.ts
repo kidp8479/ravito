@@ -64,6 +64,20 @@ interface FakeInventoryItem {
   updatedAt: Date;
 }
 
+interface FakeShoppingListItem {
+  id: string;
+  householdId: string;
+  productId: string | null;
+  rawLabel: string;
+  quantity: number;
+  unit: string;
+  checked: boolean;
+  checkedById: string | null;
+  addedById: string | null;
+  position: number;
+  createdAt: Date;
+}
+
 function memberKey(householdId: string, userId: string): string {
   return `${householdId}:${userId}`;
 }
@@ -90,6 +104,7 @@ export function createFakePrisma() {
   const invitesByCode = new Map<string, FakeHouseholdInvite>();
   const productsById = new Map<string, FakeProduct>();
   const inventoryItemsById = new Map<string, FakeInventoryItem>();
+  const shoppingListItemsById = new Map<string, FakeShoppingListItem>();
 
   const client = {
     user: {
@@ -581,6 +596,100 @@ export function createFakePrisma() {
             throw recordNotFoundError();
           }
           inventoryItemsById.delete(item.id);
+          return Promise.resolve(item);
+        },
+      ),
+    },
+    shoppingListItem: {
+      findMany: jest.fn(
+        ({
+          where,
+          orderBy,
+        }: {
+          where?: { householdId?: string };
+          orderBy?: { position?: 'asc' | 'desc' };
+        }) => {
+          let rows = [...shoppingListItemsById.values()].filter(
+            (item) =>
+              where?.householdId === undefined ||
+              item.householdId === where.householdId,
+          );
+          if (orderBy?.position) {
+            rows = rows.sort((a, b) =>
+              orderBy.position === 'desc'
+                ? b.position - a.position
+                : a.position - b.position,
+            );
+          }
+          return Promise.resolve(rows);
+        },
+      ),
+      count: jest.fn(({ where }: { where?: { householdId?: string } }) => {
+        const count = [...shoppingListItemsById.values()].filter(
+          (item) =>
+            where?.householdId === undefined ||
+            item.householdId === where.householdId,
+        ).length;
+        return Promise.resolve(count);
+      }),
+      findUnique: jest.fn(
+        ({ where }: { where: { id: string; householdId?: string } }) => {
+          const item = shoppingListItemsById.get(where.id);
+          return Promise.resolve(
+            item && matchesWhere(item, where) ? item : null,
+          );
+        },
+      ),
+      create: jest.fn(
+        ({
+          data,
+        }: {
+          data: {
+            householdId: string;
+            productId?: string;
+            rawLabel: string;
+            quantity: number;
+            unit: string;
+            addedById?: string;
+            position: number;
+          };
+        }) => {
+          const item: FakeShoppingListItem = {
+            id: `shopping-list-item-${nextId++}`,
+            checked: false,
+            checkedById: null,
+            productId: null,
+            addedById: null,
+            createdAt: new Date(),
+            ...data,
+          };
+          shoppingListItemsById.set(item.id, item);
+          return Promise.resolve(item);
+        },
+      ),
+      update: jest.fn(
+        ({
+          where,
+          data,
+        }: {
+          where: { id: string; householdId: string };
+          data: Partial<FakeShoppingListItem>;
+        }) => {
+          const item = shoppingListItemsById.get(where.id);
+          if (!item || !matchesWhere(item, where)) {
+            throw recordNotFoundError();
+          }
+          Object.assign(item, data);
+          return Promise.resolve(item);
+        },
+      ),
+      delete: jest.fn(
+        ({ where }: { where: { id: string; householdId: string } }) => {
+          const item = shoppingListItemsById.get(where.id);
+          if (!item || !matchesWhere(item, where)) {
+            throw recordNotFoundError();
+          }
+          shoppingListItemsById.delete(item.id);
           return Promise.resolve(item);
         },
       ),
