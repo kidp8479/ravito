@@ -44,9 +44,14 @@ function HouseholdPage() {
     <main className="mx-auto flex min-h-svh max-w-lg flex-col gap-6 p-8">
       <AppHeader>
         {household.data && (
-          <Button asChild variant="ghost">
-            <Link to="/inventory">Inventory</Link>
-          </Button>
+          <>
+            <Button asChild variant="ghost">
+              <Link to="/inventory">Inventory</Link>
+            </Button>
+            <Button asChild variant="ghost">
+              <Link to="/shopping-list">Shopping list</Link>
+            </Button>
+          </>
         )}
       </AppHeader>
 

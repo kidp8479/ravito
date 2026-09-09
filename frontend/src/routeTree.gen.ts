@@ -14,6 +14,7 @@ import { Route as HouseholdRouteImport } from './routes/household'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ShoppingListRouteImport } from './routes/shopping-list'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -40,6 +41,11 @@ const RegisterRoute = RegisterRouteImport.update({
   path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShoppingListRoute = ShoppingListRouteImport.update({
+  id: '/shopping-list',
+  path: '/shopping-list',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -47,6 +53,7 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/shopping-list': typeof ShoppingListRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +61,7 @@ export interface FileRoutesByTo {
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/shopping-list': typeof ShoppingListRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,13 +70,33 @@ export interface FileRoutesById {
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/shopping-list': typeof ShoppingListRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/household' | '/inventory' | '/login' | '/register'
+  fullPaths:
+    | '/'
+    | '/household'
+    | '/inventory'
+    | '/login'
+    | '/register'
+    | '/shopping-list'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/household' | '/inventory' | '/login' | '/register'
-  id: '__root__' | '/' | '/household' | '/inventory' | '/login' | '/register'
+  to:
+    | '/'
+    | '/household'
+    | '/inventory'
+    | '/login'
+    | '/register'
+    | '/shopping-list'
+  id:
+    | '__root__'
+    | '/'
+    | '/household'
+    | '/inventory'
+    | '/login'
+    | '/register'
+    | '/shopping-list'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -77,6 +105,7 @@ export interface RootRouteChildren {
   InventoryRoute: typeof InventoryRoute
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
+  ShoppingListRoute: typeof ShoppingListRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -116,6 +145,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/shopping-list': {
+      id: '/shopping-list'
+      path: '/shopping-list'
+      fullPath: '/shopping-list'
+      preLoaderRoute: typeof ShoppingListRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -125,6 +161,7 @@ const rootRouteChildren: RootRouteChildren = {
   InventoryRoute: InventoryRoute,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
+  ShoppingListRoute: ShoppingListRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
