@@ -2,10 +2,17 @@
 // guards - plain module code, no component tree to read context from -
 // can check and await it directly.
 
+// accessToken is nullable on the authenticated variant for the offline
+// case (RAV-19): setAuthenticatedOffline() below sets this without a
+// real token when refresh fails due to a network error rather than the
+// server actually rejecting the session - route guards treat it as
+// "render the page, cached data can still show" (lib/api.ts's
+// ensureAuthLoaded), while apiFetch simply omits the Authorization
+// header until a real refresh succeeds once back online.
 type AuthState =
   | { status: 'loading' }
   | { status: 'anonymous' }
-  | { status: 'authenticated'; accessToken: string };
+  | { status: 'authenticated'; accessToken: string | null };
 
 let state: AuthState = { status: 'loading' };
 const listeners = new Set<() => void>();
@@ -57,6 +64,16 @@ export function hasSessionHint(): boolean {
 export function setAccessToken(accessToken: string): void {
   writeSessionHint(true);
   setState({ status: 'authenticated', accessToken });
+}
+
+// Called by doRefresh() (lib/api.ts) when a refresh attempt fails with a
+// network-level error (offline, DNS, connection refused) rather than the
+// server responding - that's not proof the session is invalid, just that
+// nothing could be confirmed right now. Does not touch the session hint:
+// this isn't a new session, just continuing to assume the existing one
+// until it can actually be checked again.
+export function setAuthenticatedOffline(): void {
+  setState({ status: 'authenticated', accessToken: null });
 }
 
 export function clearAccessToken(): void {

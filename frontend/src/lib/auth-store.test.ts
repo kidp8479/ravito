@@ -67,4 +67,19 @@ describe('auth-store', () => {
 
     expect(store.hasSessionHint()).toBe(true);
   });
+
+  it('setAuthenticatedOffline moves to authenticated with no token, without touching the session hint', async () => {
+    const store = await freshStore();
+
+    store.setAuthenticatedOffline();
+
+    expect(store.getAuthState()).toEqual({
+      status: 'authenticated',
+      accessToken: null,
+    });
+    expect(store.getAccessToken()).toBeNull();
+    // Not itself responsible for the hint - doRefresh() (lib/api.ts) only
+    // calls this when hasSessionHint() was already true.
+    expect(store.hasSessionHint()).toBe(false);
+  });
 });
