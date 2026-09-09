@@ -24,5 +24,10 @@ import { JwtStrategy } from './strategies/jwt.strategy';
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
+  // JwtModule re-exported: ShoppingListGateway (RAV-14) verifies the
+  // access token on a socket handshake the same way JwtStrategy verifies
+  // it on an HTTP request, so it needs the same JwtService/secret rather
+  // than a second JwtModule.registerAsync() duplicating this config.
+  exports: [JwtModule],
 })
 export class AuthModule {}
