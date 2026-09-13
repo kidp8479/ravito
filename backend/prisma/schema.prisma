@@ -100,11 +100,23 @@ model RefreshToken {
 
 // Grocery-aisle grouping for the inventory screen (RAV-12). Nullable on
 // Product: a quick-added item doesn't have to be categorized up front.
+//
+// PANTRY started as a single catch-all and, in practice, absorbed most of
+// a household's dry goods - spices, canned goods, pasta, condiments, baking
+// supplies and snacks all landed in one undifferentiated bucket. Split into
+// narrower categories so the inventory screen's grouping is actually useful
+// day to day; PANTRY remains as the catch-all for whatever doesn't fit.
 enum ProductCategory {
   FRUITS_AND_VEGETABLES
   DAIRY
   MEAT_AND_FISH
   BAKERY
+  PASTA_RICE_AND_GRAINS
+  CANNED_AND_JARRED
+  SAUCES_OILS_AND_CONDIMENTS
+  SPICES_AND_HERBS
+  BAKING
+  SNACKS_AND_DRIED_GOODS
   PANTRY
   FROZEN
   BEVERAGES

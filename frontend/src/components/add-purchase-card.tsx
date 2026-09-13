@@ -27,7 +27,7 @@ function AddPurchaseCard({ householdId }: { householdId: string }) {
     try {
       let productId = picker.selectedProductId;
       if (!productId) {
-        productId = (await createProduct.mutateAsync(picker.name)).id;
+        productId = (await createProduct.mutateAsync({ name: picker.name })).id;
         // Same reasoning as FastAddCard: recorded before the next await
         // so a resubmit after a failure reuses this product instead of
         // trying to create it again and 409ing on the name it just claimed.
