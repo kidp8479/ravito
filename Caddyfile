@@ -1,0 +1,17 @@
+# Reverse proxy for the production deployment (ADR 0004). Caddy issues and
+# renews Let's Encrypt certificates for both domains automatically - no
+# manual certbot/renewal cron needed. See docs/deployment.md.
+#
+# {$APP_DOMAIN} / {$API_DOMAIN} come from docker-compose.prod.yml's
+# environment block, itself sourced from .env.prod.
+
+{$APP_DOMAIN} {
+	reverse_proxy frontend:80
+}
+
+{$API_DOMAIN} {
+	# Handles the Socket.IO WebSocket upgrade (ADR 0003) the same way as
+	# any other request - Caddy's reverse_proxy detects the Upgrade header
+	# automatically, no separate config block needed.
+	reverse_proxy backend:3000
+}

@@ -7,6 +7,8 @@ feeds a **real-time shared shopping list**. Longer term, a kitchen hub
 - Design and staged roadmap: [`PLAN.md`](./PLAN.md)
 - Project context and stack: [`CLAUDE.md`](./CLAUDE.md)
 - Day-to-day conventions: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+- Production deployment: [`docs/deployment.md`](./docs/deployment.md)
+  ([ADR 0004](./docs/adr/0004-deployment-target.md))
 
 ## Stack
 

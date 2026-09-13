@@ -9,6 +9,7 @@ build/
 
 # Env files (never commit secrets)
 .env
+.env.prod
 .env.*.local
 .env.local
 
