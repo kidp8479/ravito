@@ -36,6 +36,12 @@ COPY --from=build /app/dist ./dist
 # untouched by the prod-only `npm ci` above - prisma (the CLI) is a
 # devDependency and isn't present in this stage to regenerate it.
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
+# schema.prisma + migrations/ - not needed to run the app itself, but
+# `npx prisma migrate deploy` (the deployment runbook's migration step)
+# needs them on disk to know what to apply. `npx` fetches the `prisma`
+# CLI package on the fly since it's a devDependency excluded above -
+# slower per invocation, but keeps the always-running image lean.
+COPY --from=build /app/prisma ./prisma
 
 # node:24-alpine already ships a non-root "node" user - use it instead of root
 USER node
