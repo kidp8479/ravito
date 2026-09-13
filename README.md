@@ -17,8 +17,10 @@ React + Vite + TanStack Router/Query (PWA frontend) · NestJS + Prisma
 
 ## Status
 
-Scaffolding in place (from `kidp8479/42-project-template`). Lot 0 (monorepo
-setup, CI, first ADR) not started yet. See `PLAN.md`.
+v1 core shipped and live: auth, household, inventory, and the real-time
+shared shopping list (Lots 0-3, `PLAN.md`). Deployed to production
+(`docs/deployment.md`). Next up: purchase-history bulk entry and the
+backlog items in `PLAN.md`.
 
 ## Getting started
 
