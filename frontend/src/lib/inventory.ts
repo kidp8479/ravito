@@ -6,6 +6,12 @@ export type ProductCategory =
   | 'DAIRY'
   | 'MEAT_AND_FISH'
   | 'BAKERY'
+  | 'PASTA_RICE_AND_GRAINS'
+  | 'CANNED_AND_JARRED'
+  | 'SAUCES_OILS_AND_CONDIMENTS'
+  | 'SPICES_AND_HERBS'
+  | 'BAKING'
+  | 'SNACKS_AND_DRIED_GOODS'
   | 'PANTRY'
   | 'FROZEN'
   | 'BEVERAGES'
@@ -18,6 +24,44 @@ export interface Product {
   category: ProductCategory | null;
   defaultUnit: string | null;
 }
+
+// Shared between the inventory grouping view and any product-editing UI
+// (FastAddCard, InventoryRow) so the enum's labels/order are defined once.
+export const PRODUCT_CATEGORIES: ProductCategory[] = [
+  'FRUITS_AND_VEGETABLES',
+  'DAIRY',
+  'MEAT_AND_FISH',
+  'BAKERY',
+  'PASTA_RICE_AND_GRAINS',
+  'CANNED_AND_JARRED',
+  'SAUCES_OILS_AND_CONDIMENTS',
+  'SPICES_AND_HERBS',
+  'BAKING',
+  'SNACKS_AND_DRIED_GOODS',
+  'PANTRY',
+  'FROZEN',
+  'BEVERAGES',
+  'HOUSEHOLD_AND_HYGIENE',
+  'OTHER',
+];
+
+export const CATEGORY_LABELS: Record<ProductCategory, string> = {
+  FRUITS_AND_VEGETABLES: 'Fruits & Vegetables',
+  DAIRY: 'Dairy',
+  MEAT_AND_FISH: 'Meat & Fish',
+  BAKERY: 'Bakery',
+  PASTA_RICE_AND_GRAINS: 'Pasta, Rice & Grains',
+  CANNED_AND_JARRED: 'Canned & Jarred',
+  SAUCES_OILS_AND_CONDIMENTS: 'Sauces, Oils & Condiments',
+  SPICES_AND_HERBS: 'Spices & Herbs',
+  BAKING: 'Baking',
+  SNACKS_AND_DRIED_GOODS: 'Snacks & Dried Goods',
+  PANTRY: 'Pantry',
+  FROZEN: 'Frozen',
+  BEVERAGES: 'Beverages',
+  HOUSEHOLD_AND_HYGIENE: 'Household & Hygiene',
+  OTHER: 'Other',
+};
 
 export interface InventoryItem {
   id: string;
@@ -61,10 +105,32 @@ export function useSearchProducts(householdId: string, q: string) {
 
 export function useCreateProduct(householdId: string) {
   return useMutation({
-    mutationFn: (name: string) =>
+    mutationFn: (input: { name: string; category?: ProductCategory }) =>
       apiFetch<Product>(`/households/${householdId}/products`, {
         method: 'POST',
-        body: { name },
+        body: input,
+      }),
+  });
+}
+
+export function useUpdateProduct(householdId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...input
+    }: {
+      id: string;
+      name?: string;
+      category?: ProductCategory;
+    }) =>
+      apiFetch<Product>(`/households/${householdId}/products/${id}`, {
+        method: 'PATCH',
+        body: input,
+      }),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({
+        queryKey: inventoryKey(householdId),
       }),
   });
 }
@@ -99,10 +165,17 @@ export function useCreateInventoryItem(householdId: string) {
 export function useUpdateInventoryItem(householdId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, quantity }: { id: string; quantity: number }) =>
+    mutationFn: ({
+      id,
+      ...input
+    }: {
+      id: string;
+      quantity?: number;
+      unit?: string;
+    }) =>
       apiFetch<InventoryItem>(`/households/${householdId}/inventory/${id}`, {
         method: 'PATCH',
-        body: { quantity },
+        body: input,
       }),
     onSuccess: () =>
       void queryClient.invalidateQueries({

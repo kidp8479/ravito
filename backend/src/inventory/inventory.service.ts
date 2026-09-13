@@ -66,10 +66,15 @@ export class InventoryService {
 
   // Same shape as create()'s return: a caller that reads item.product off
   // one response shouldn't get a different shape from the other.
+  //
+  // Ordered by product name, not updatedAt: sorting by updatedAt made an
+  // item jump to the top of its category every time its quantity changed
+  // (e.g. the +/- steppers on the inventory screen), which is disorienting
+  // for a list people scan visually rather than search.
   list(householdId: string): Promise<InventoryItemView[]> {
     return householdScopedInventoryItems(this.prisma, householdId).findMany({
       ...PRODUCT_VIEW_INCLUDE,
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { product: { name: 'asc' } },
     });
   }
 

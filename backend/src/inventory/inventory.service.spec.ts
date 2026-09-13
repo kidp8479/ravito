@@ -123,7 +123,7 @@ describe('InventoryService', () => {
             select: { id: true, name: true, category: true, defaultUnit: true },
           },
         },
-        orderBy: { updatedAt: 'desc' },
+        orderBy: { product: { name: 'asc' } },
         where: { householdId: 'h1' },
       });
     });
