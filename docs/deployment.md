@@ -150,6 +150,39 @@ a file outside the Docker volume, pulled to a local machine periodically:
 scp ravito@<droplet-ip>:/home/ravito/backups/ravito-*.sql.gz ~/ravito-backups/
 ```
 
+## Tearing down and restoring
+
+Destroying the Droplet also destroys its data (the Postgres volume) and
+`.env.prod`; DigitalOcean's weekly Backups are tied to the Droplet and go
+with it. Before destroying:
+
+1. Dump the database to your machine: `make prod-dump HOST=<droplet-ip>`
+   (writes `~/ravito-backups/ravito-<date>.sql.gz`).
+2. Save `.env.prod` in your password manager. It is not in git. Fresh
+   secrets also work, but: new `JWT_ACCESS_SECRET` logs everyone out, and
+   `POSTGRES_PASSWORD` must match whatever the restored database is
+   started with (on a fresh volume, the new `.env.prod` value simply
+   applies).
+3. Optionally keep a DigitalOcean snapshot (small storage cost) for a
+   whole-machine restore.
+
+To bring it back:
+
+1. Follow steps 1 to 6 above (new Droplet, so **new IP**: update both A
+   records at Name.com first, or Caddy cannot get certificates).
+2. Skip step 7 (`prisma migrate deploy`): the dump already contains the
+   schema and the `_prisma_migrations` table. Restore it instead:
+
+```sh
+gunzip -c ravito-<date>.sql.gz | ssh ravito@<new-ip> \
+  "cd ravito && docker compose -f docker-compose.prod.yml --env-file .env.prod exec -T db psql -U ravito ravito"
+```
+
+3. Verify as in step 8 (log in with an existing account).
+
+If the restore is done on a database that already ran the migrations, drop
+and recreate it first, or the dump's `CREATE TABLE` statements will fail.
+
 ## Security checklist recap
 
 See ADR 0004 for the reasoning; at a glance, before calling this done:
