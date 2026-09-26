@@ -15,7 +15,7 @@ CONTAINER := $(if $(filter docker,$(firstword $(COMPOSE))),docker,podman)
 # named `<project>_<key>` on both docker compose and podman-compose.
 PROJECT := $(notdir $(CURDIR))
 
-.PHONY: help \
+.PHONY: help prod-dump \
         install install-backend install-frontend hooks-install \
         dev-backend dev-frontend \
         up down ps re \
@@ -56,6 +56,9 @@ help:
 	@echo "  clean           - stop and remove containers (keeps volumes + images)"
 	@echo "  fclean          - clean + remove volumes (db, node_modules) and locally-built images"
 	@echo "  wipe-db         - remove only the db container + its data volume (fast schema reset)"
+	@echo ""
+	@echo "Production"
+	@echo "  prod-dump HOST=<ip>  - pg_dump the prod db over SSH into ~/ravito-backups/"
 	@echo ""
 	@echo "Code quality (host-side)"
 	@echo "  format[-check]   - Prettier, write (or check only) on backend + frontend"
@@ -221,6 +224,24 @@ typecheck-backend:
 
 typecheck-frontend:
 	cd frontend && npm run typecheck
+
+# ---------------------------------------------------------------------------- #
+# Production                                                                   #
+# ---------------------------------------------------------------------------- #
+
+# Dumps the prod database to a local gzipped SQL file (see docs/deployment.md,
+# "Tearing down and restoring"). Writes to a temp file first so a failed SSH
+# never leaves a truncated dump that looks valid.
+PROD_HOST ?= $(HOST)
+BACKUP_DIR ?= $(HOME)/ravito-backups
+
+prod-dump:
+	@test -n "$(PROD_HOST)" || { echo "usage: make prod-dump HOST=<droplet-ip>"; exit 1; }
+	@mkdir -p $(BACKUP_DIR)
+	@out=$(BACKUP_DIR)/ravito-$$(date +%Y%m%d-%H%M).sql.gz; \
+	ssh ravito@$(PROD_HOST) "cd ravito && docker compose -f docker-compose.prod.yml --env-file .env.prod exec -T db pg_dump -U ravito ravito | gzip" > $$out.tmp \
+	  && gunzip -t $$out.tmp && mv $$out.tmp $$out && echo "wrote $$out" \
+	  || { rm -f $$out.tmp; echo "dump failed"; exit 1; }
 
 # ---------------------------------------------------------------------------- #
 # Test / build / docs                                                          #
